@@ -130,6 +130,9 @@ export default function Home() {
   const btcPosition = t?.positions.find((position) => !position.protected &&
     (position.symbol === "BTCUSD" || position.symbol === "BTC/USD"));
   const openPnl = btcPosition?.unrealizedPl == null ? null : Number(btcPosition.unrealizedPl);
+  // SOURCE: half a USD cent is the rounding boundary for a two-decimal display.
+  const openPnlLabel = openPnl == null ? "—" : openPnl !== 0 && Math.abs(openPnl) < 0.005
+    ? `${openPnl < 0 ? "Loss" : "Gain"} <1¢` : signedMoney(openPnl, 2);
   const sellOrders = executions.filter(({ order }) => order.side === "sell");
   // GUESS: # UNCALIBRATED GUESS — 20 minutes marks stale display data,
   // not service uptime or a trading signal.
@@ -197,7 +200,7 @@ export default function Home() {
           <span className={`position-state ${btcPosition ? "is-open" : ""}`}>{btcPosition ? "● OPEN" : "○ FLAT"}</span></div>
           <strong className="position-value">{btcPosition ? money(btcPosition.marketValue) : "$0.00"}</strong>
           <span className="position-sub">{btcPosition ? `${quantity(btcPosition.qty)} BTC held` : "No BTC exposure at this snapshot"}</span>
-          <div className="position-pnl"><span>Broker unrealized P&amp;L</span><b className={tone(openPnl)}>{btcPosition ? signedMoney(openPnl, 2) : "—"}</b></div>
+          <div className="position-pnl"><span>Broker unrealized P&amp;L</span><b className={tone(openPnl)}>{btcPosition ? openPnlLabel : "—"}</b></div>
           <div className="position-facts"><div><span>Entry</span><strong>{money(btcPosition?.avgEntryPrice)}</strong></div>
             <div><span>Broker mark</span><strong>{money(btcPosition?.currentPrice)}</strong></div></div>
           <div className="risk-strip"><span>BASELINE BUY <b>$100</b></span><span>BTC EXPOSURE CAP <b>$500</b></span></div>

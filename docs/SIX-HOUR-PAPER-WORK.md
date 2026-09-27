@@ -211,8 +211,11 @@ Codex follow-ups. This file is the handoff for the scheduled follow-up loop.
   the recorded quote-cross condition. A concise explanation of the actual
   OCaml decision sequence was added from the implementation, without claiming
   that the rule predicts after-cost profits. Mobile navigation and wording
-  were tightened after that screenshot and still required final deployment
-  check.
+  were tightened; the public UI then showed two recent executions and the
+  complete history link, and filtering exits plus selecting a trade updated
+  the inspector in the browser. A sub-cent open P&L display was corrected so
+  rounding cannot show a misleading negative zero. The final deployment check
+  for that last formatting change remained outstanding at this checkpoint.
 
 ## Next verified steps
 
