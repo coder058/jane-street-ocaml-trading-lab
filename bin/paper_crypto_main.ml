@@ -380,10 +380,13 @@ let run_hot_stream ~trade =
             five_retrieved_at := retrieved_at;
             let bar_time = match state.last with
               | None -> "none" | Some bar -> bar.timestamp in
-            let trend = match reading with
-              | None -> "warming" | Some value -> value.trend in
-            log "TECHNICAL_5M venue=Alpaca symbol=BTC/USD retrieved_at=%s contiguous_bars=%d last_bar=%s trend=%s probability=unknown order_authority=false"
-              retrieved_at state.count bar_time trend
+            let trend, patterns = match reading with
+              | None -> "warming", "none"
+              | Some value -> value.trend,
+                (if value.patterns = [] then "none" else
+                   String.concat "," value.patterns) in
+            log "TECHNICAL_5M venue=Alpaca symbol=BTC/USD retrieved_at=%s contiguous_bars=%d last_bar=%s trend=%s patterns=%s probability=unknown order_authority=false"
+              retrieved_at state.count bar_time trend patterns
           with error ->
             five_reading := None;
             log "TECHNICAL_5M_UNAVAILABLE reason=%s"
