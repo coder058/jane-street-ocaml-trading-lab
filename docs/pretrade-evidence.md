@@ -58,7 +58,8 @@ Pattern Forge display; its use as a trade rule is a guess. The model charges
 Alpaca's documented first-tier 0.25% taker fee on both sides and a **4.208061
 basis-point round-trip spread proxy** based on only 42 observed stream quotes.
 Daily bars can contain quote midpoints, so these modeled fills are not
-executable evidence.
+executable evidence. Returns use normalized full-capital exposure, which does
+not implement the actual bot's $30 order cap.
 
 | Period | Rule return | Buy/hold return | Rule maximum drawdown | Rule trades |
 | --- | ---: | ---: | ---: | ---: |
