@@ -50,6 +50,14 @@ Codex follow-ups. This file is the handoff for the scheduled follow-up loop.
   It remains before fee activities. A fresh read-only paper Activities query
   returned zero `CFEE` and zero `FEE` rows at 19:32 UTC. Alpaca says crypto
   fees can post at end of day, so net paper P&L remains unverified.
+- A quantity reconciliation found that bot buy fills minus bot sell fills
+  exceeded the broker BTC position by 0.000016938 BTC at the 18:54 flat
+  checkpoint (0.2504027% of bot buy-filled BTC), and by 0.000022836 BTC at
+  19:30 (0.2503131%). This closely matches Alpaca's published tier-one
+  0.25% taker fee on the BTC credited for buys. It is a consistency check,
+  not proof of every fee entry: do not subtract another 0.25% buy fee from
+  the observed flat cash difference without matching actual activities.
+  The cash-flow auditor now reports the unexplained BTC quantity explicitly.
 - The frozen descriptive candle/Markov model uses 52,070 adjacent labels and
   73 states with both bars strictly before 1 July 2026. The older audit's
   52,071 development labels included one transition into July; this frozen
@@ -72,7 +80,11 @@ Codex follow-ups. This file is the handoff for the scheduled follow-up loop.
   forecast horizon. The label had not arrived at this checkpoint. The
   historical state frequency for this one observation was 0.5204565408252854
   from 5,695 training labels; this is not a calibrated chance of a profitable
-  trade and did not authorize an order.
+  trade and did not authorize an order. At 19:39:53 the following bar was
+  retrieved and labeled down, with a next-close midpoint move of −0.50480
+  basis points. This is one outcome, not a performance estimate. The next
+  recorded prediction had only 6.515208 seconds of lead time, confirming
+  the REST path cannot currently support the intended five-minute horizon.
 - The captured live one-minute bar stream delivered 653 closed bars over 690
   elapsed slots, with 37 missing minute slots; 108 of 138 five-minute groups
   had all five minute bars. Among 106 complete groups also present in the
@@ -82,7 +94,7 @@ Codex follow-ups. This file is the handoff for the scheduled follow-up loop.
   roughly at one-minute close. These observations support investigating a
   timely stream-based five-minute aggregator with strict gap handling. The
   37 missing slots prohibit assuming a continuous feed.
-- Eleven Python tests passed, including a boundary check that excludes the
+- Twelve Python tests passed, including a boundary check that excludes the
   July label and a point-in-time shadow prediction/label check. The old
   descriptive audit metrics did not change after the state refactor.
 

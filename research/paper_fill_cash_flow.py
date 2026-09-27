@@ -1,7 +1,8 @@
 """Reconcile bot fill cash flow from a signed public monitor snapshot.
 
 This does not calculate net P&L. Alpaca may post crypto fee activities later,
-and an open BTC position makes the cash difference unsuitable as a result.
+and buy-side BTC fees may already affect the quantity available for sale.
+An open BTC position makes the cash difference unsuitable as a result.
 """
 
 from __future__ import annotations
@@ -39,6 +40,8 @@ def reconcile(document: dict) -> dict:
     bot_fills = [fill for fill in fills if fill.get("orderId") in bot_ids]
     buy_value = Decimal("0")
     sell_value = Decimal("0")
+    buy_qty = Decimal("0")
+    sell_qty = Decimal("0")
     buy_count = sell_count = 0
     for fill in bot_fills:
         if fill.get("symbol") not in ("BTCUSD", "BTC/USD"):
@@ -47,9 +50,11 @@ def reconcile(document: dict) -> dict:
         price = positive_decimal(fill.get("price"), "fill price")
         if fill.get("side") == "buy":
             buy_value += qty * price
+            buy_qty += qty
             buy_count += 1
         elif fill.get("side") == "sell":
             sell_value += qty * price
+            sell_qty += qty
             sell_count += 1
         else:
             raise ValueError("bot fill has unexpected side")
@@ -57,7 +62,12 @@ def reconcile(document: dict) -> dict:
                      if position.get("symbol") in ("BTCUSD", "BTC/USD")]
     if len(btc_positions) > 1:
         raise ValueError("multiple BTC positions returned")
-    flat = not btc_positions or Decimal(str(btc_positions[0].get("qty"))) == 0
+    broker_qty = (Decimal(str(btc_positions[0].get("qty")))
+                  if btc_positions else Decimal("0"))
+    if not broker_qty.is_finite() or broker_qty < 0:
+        raise ValueError("invalid BTC position quantity")
+    flat = broker_qty == 0
+    quantity_difference = buy_qty - sell_qty - broker_qty
     return {
         "snapshotAt": telemetry.get("generatedAt"),
         "botOrders": len(bot_orders),
@@ -66,9 +76,14 @@ def reconcile(document: dict) -> dict:
         "filledBuyNotionalUsd": str(buy_value),
         "filledSellNotionalUsd": str(sell_value),
         "filledCashDeltaBeforeFeeActivitiesUsd": str(sell_value - buy_value),
+        "botBuyFilledQtyBtc": str(buy_qty),
+        "botSellFilledQtyBtc": str(sell_qty),
+        "brokerBtcQty": str(broker_qty),
+        "unreconciledBtcQtyAfterBotFills": str(quantity_difference),
+        "unreconciledQtyAsShareOfBuyFills": str(quantity_difference / buy_qty) if buy_qty else None,
         "btcPositionFlat": flat,
         "netResultVerified": False,
-        "limitation": "Only bot BTC fills are included. CFEE/FEE activities are absent from this snapshot and may post later. When BTC is open, cash delta includes inventory cost and is not a realized result. Paper fills are simulated.",
+        "limitation": "Only bot BTC fills are included. The BTC quantity difference is consistent with buy-side asset fees but cannot alone attribute every unit; do not subtract fee activities again without reconciling them. CFEE/FEE activities are absent from this snapshot and may post later. When BTC is open, cash delta includes inventory cost and is not a realized result. Paper fills are simulated.",
     }
 
 

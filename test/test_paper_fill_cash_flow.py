@@ -35,12 +35,22 @@ class PaperFillCashFlowTests(unittest.TestCase):
         result = reconcile(self.snapshot)
         self.assertEqual(result["filledCashDeltaBeforeFeeActivitiesUsd"], "0.05")
         self.assertTrue(result["btcPositionFlat"])
+        self.assertEqual(result["unreconciledBtcQtyAfterBotFills"], "0.00")
         self.assertFalse(result["netResultVerified"])
 
     def test_open_btc_is_not_a_closed_result(self) -> None:
         self.snapshot["positions"].append({"symbol": "BTCUSD", "qty": "0.01"})
         result = reconcile(self.snapshot)
         self.assertFalse(result["btcPositionFlat"])
+        self.assertFalse(result["netResultVerified"])
+
+    def test_quantity_difference_is_reported_without_fee_attribution(self) -> None:
+        # SOURCE: 0.25% of the synthetic 0.01 BTC buy fill is 0.000025 BTC;
+        # the example exercises arithmetic, not an observed brokerage fee.
+        self.snapshot["fills"][1]["qty"] = "0.009975"
+        result = reconcile(self.snapshot)
+        self.assertEqual(result["unreconciledBtcQtyAfterBotFills"], "0.000025")
+        self.assertEqual(result["unreconciledQtyAsShareOfBuyFills"], "0.0025")
         self.assertFalse(result["netResultVerified"])
 
     def test_incomplete_history_is_rejected(self) -> None:
