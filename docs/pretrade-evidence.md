@@ -45,6 +45,18 @@ exchange/VPS clock offset was not independently calibrated, so these deltas
 must not be called one-way network latency. No fill behavior or predictive
 performance follows from this short capture.
 
+The collector now also archives Alpaca US one-minute bars and late revisions.
+Its first audited continuation contained two delivered closed-minute bars,
+approximately 60.048 seconds after each bar's start timestamp. The bar
+timestamp is the *start* of the minute, so this number is not network latency.
+For historical feature work, a read-only 5-minute pull from 20 September
+through midnight 27 September returned 2,016 bars. The
+[continuity audit](../research/bar_gap_audit.py) found one missing interval:
+26 September at 07:30 UTC, between bars at 07:25 and 07:35. No invalid OHLC
+rows were found. Indicators must treat that interval as a gap; bars from a
+later historical download are not a point-in-time record of when revisions
+became available.
+
 ### One frozen daily-rule probe, not an execution claim
 
 The read-only [daily-bar downloader](../research/fetch_daily_bars.py) saved
@@ -77,7 +89,7 @@ decision gate for new paper orders.
 
 | Input | Available evidence | Trading limit |
 | --- | --- | --- |
-| Alpaca crypto quotes / order books | Alpaca documents a streaming feed for trades, quotes, books and bars. The OCaml service polls a latest-quote REST endpoint every 30 seconds; that interval is an **UNCALIBRATED GUESS**. A separate read-only collector now archives Alpaca US WebSocket quotes, trades and books privately on Dublin with local receipt timestamps. | A stale quote or different venue must not become an entry price. The stream archive needs time, integrity checks and fill-quality research before it can support a strategy. The present polling order loop is unsuitable for scalping. |
+| Alpaca crypto quotes / order books | Alpaca documents a streaming feed for trades, quotes, books and bars. The OCaml service polls a latest-quote REST endpoint every 30 seconds; that interval is an **UNCALIBRATED GUESS**. A separate read-only collector now archives Alpaca US WebSocket quotes, trades, books and minute bars privately on Dublin with local receipt timestamps. | A stale quote or different venue must not become an entry price. The stream archive needs time, integrity checks and fill-quality research before it can support a strategy. The present polling order loop is unsuitable for scalping. |
 | Pattern Forge | Its public API supplies validated closed Hyperliquid candles for BTC, ETH and SOL. The monitor derives descriptive 5m, 1h and 1d shapes/indicators from them. | Hyperliquid is not Alpaca's execution venue. Its candle patterns and geometric thresholds are uncalibrated; no order is authorized by them. |
 | Alpaca US stocks / ETFs | The Basic market-data plan gives live IEX coverage, not consolidated SIP, and excludes the most recent 15 minutes of historical SIP queries. | Do not treat IEX alone as a full-market execution reference for energy ETFs or AAPL. AAPL is explicitly protected from this bot. |
 | Energy Monitor | Public European electricity/gas observations and a candidate EIA WTI/Brent daily historical source. | These have different units, publication times and underlying markets from any Alpaca ETF. No direct tradable mapping or predictive lag has been validated. |
