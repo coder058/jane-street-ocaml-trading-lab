@@ -361,7 +361,7 @@ def main() -> int:
         raise ValueError("telemetry exceeds the signed endpoint limit")
     if args.dry_run:
         five = document["analysis"]["fiveMinute"]
-        print(f"telemetry: dry run, mode={service['mode']}, {len(document['positions'])} positions, {len(document['orders'])} orders, {len(document['fills'])} fills, {len(events)} events, complete_orders={document['ordersComplete']}, complete_fills={document['fillsComplete']}, complete_journal={journal_complete}, five_minute_trend={five['trend'] if five else 'unavailable'}, five_minute_last_bar={five['lastBarAt'] if five else 'unavailable'}, {len(body)} bytes")
+        print(f"telemetry: dry run, mode={service['mode']}, {len(document['positions'])} positions, {len(document['orders'])} orders, {len(document['fills'])} fills, {len(events)} events, {len(document['decisionHistory'])} order decisions, complete_orders={document['ordersComplete']}, complete_fills={document['fillsComplete']}, complete_journal={journal_complete}, five_minute_trend={five['trend'] if five else 'unavailable'}, five_minute_last_bar={five['lastBarAt'] if five else 'unavailable'}, {len(body)} bytes")
         return 0
     private_key = serialization.load_pem_private_key(KEY_PATH.read_bytes(), password=None)
     signature = base64.b64encode(private_key.sign(body)).decode("ascii")
