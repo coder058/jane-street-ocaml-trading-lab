@@ -133,6 +133,9 @@ Codex follow-ups. This file is the handoff for the scheduled follow-up loop.
   training occurrences and zero occurrences in the already-inspected
   July–September interval. It does not support a probability size tier or
   order policy. The Brier score measures direction, not executable return.
+- The exact baseline and rejected fee screen are recorded in
+  [POLICY-ATTEMPTS.md](POLICY-ATTEMPTS.md), including their data limitations
+  and the conditions required before reconsidering order authority.
 - Fifteen Python tests passed, including the scorer's time-order and
   duplicate guards. No OCaml order logic changed.
 
