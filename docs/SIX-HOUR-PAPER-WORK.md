@@ -139,6 +139,36 @@ Codex follow-ups. This file is the handoff for the scheduled follow-up loop.
 - Fifteen Python tests passed, including the scorer's time-order and
   duplicate guards. No OCaml order logic changed.
 
+## 22:47–22:57 UTC follow-up
+
+- Dublin reported the paper order service, market capture, five-minute bar,
+  Markov shadow and telemetry timers active at 22:56:37 UTC. The durable
+  `NO_PENDING` marker was absent. The public signed snapshot at 22:55:54 UTC
+  contained 95 broker orders, of which 94 carried the bot's BTC prefix, and
+  121 broker fills, of which 118 carried that prefix. A broker BTC position of
+  0.001184993 BTC had a reported market value of $99.700583. AAPL remained a
+  separate protected position. This is a point-in-time service check, not a
+  continuous uptime measurement.
+- The preceding flat snapshot at 22:47:24 UTC had 93 bot orders, 117 bot fills,
+  filled buys of $1062.80916274819 and filled sells of $1059.938718984512.
+  Their cash difference was −$2.870443763678 while the broker reported no BTC
+  position. Gross filled BTC quantity differed by 0.000031415 BTC, or
+  0.2502534% of bought BTC. This is consistent with a buy-side asset fee, but
+  the fee activities were not newly reconciled in this follow-up. No verified
+  net P&L can be stated.
+- A replacement dashboard was built locally with one row per broker order,
+  partial-fill status, a selected-order trace, filterable entries and exits,
+  the open BTC position, and an indicative bot-only cash-plus-mark figure.
+  The indicator explicitly excludes AAPL, requires complete order/fill
+  histories, and hides the figure if any non-bot BTC order or missing BTC mark
+  prevents attribution. It does not label paper results as live profit.
+  A 22:55:54 UTC snapshot produced an indicative marked figure of
+  −$3.1573682976477926 (buy fills $1162.7966702821598, sell fills
+  $1059.938718984512, broker BTC mark $99.700583); this is not an executable
+  liquidation price or verified net P&L.
+- Seven web tests, TypeScript typecheck and Next.js production build passed
+  before publishing. The order policy and VPS executable were not changed.
+
 ## Next verified steps
 
 1. Recheck service, feed, broker position, open orders and pending journal.

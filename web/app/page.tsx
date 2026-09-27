@@ -1,53 +1,102 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import type { PaperFill, PaperOrder, PaperPosition, PaperTelemetry } from "@/lib/telemetry";
+import { botAccounting, botFills, botOrders, decisionForOrder, orderDisplayStatus, orderFillSummary } from "@/lib/bot-view";
+import type { PaperFill, PaperOrder, PaperTelemetry } from "@/lib/telemetry";
 
 type Live = { generatedAt: string; telemetry: PaperTelemetry | null };
-const usd = (value: string | number | null | undefined) => {
-  const n = Number(value);
-  return value == null || !Number.isFinite(n) ? "—" : new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 2 }).format(n);
-};
-const qty = (value: string | number | null | undefined) => {
-  const n = Number(value);
-  return value == null || !Number.isFinite(n) ? "—" : new Intl.NumberFormat("en-US", { maximumFractionDigits: 9 }).format(n);
-};
-const at = (value: string | null | undefined) => value && !Number.isNaN(Date.parse(value)) ?
-  new Intl.DateTimeFormat("en-GB", { dateStyle: "short", timeStyle: "medium", timeZone: "UTC" }).format(new Date(value)) + " UTC" : "—";
-const signed = (value: string | number | null | undefined) => {
-  if (value == null || !Number.isFinite(Number(value))) return "—";
-  // SOURCE: show the broker's decimal precision so a sub-cent paper P&L is not rounded to zero.
-  const raw = String(value);
-  return Number(value) < 0 ? `-$${raw.replace("-", "")}` : `${Number(value) > 0 ? "+" : ""}$${raw}`;
-};
-const tone = (value: string | number | null | undefined) => value == null ? "" : Number(value) > 0 ? "gain" : Number(value) < 0 ? "loss" : "";
+type SideFilter = "all" | "buy" | "sell";
 
-function Positions({ rows }: { rows: PaperPosition[] }) {
-  if (!rows.length) return <p className="empty">No bot BTC position is open at this broker snapshot.</p>;
-  return <div className="position-grid">{rows.map((p) => <div className="position-card" key={p.symbol}>
-    <div className="position-title"><strong>{p.symbol}</strong><span className={tone(p.unrealizedPl)}>{signed(p.unrealizedPl)} <small>open P&amp;L</small></span></div>
-    <dl><div><dt>Quantity</dt><dd>{qty(p.qty)} BTC</dd></div><div><dt>Average entry</dt><dd>{usd(p.avgEntryPrice)}</dd></div><div><dt>Broker mark</dt><dd>{usd(p.currentPrice)}</dd></div><div><dt>Market value</dt><dd>{usd(p.marketValue)}</dd></div></dl>
-  </div>)}</div>;
+const money = (value: number | string | null | undefined, digits = 2) => {
+  const number = Number(value);
+  return value == null || !Number.isFinite(number) ? "—" :
+    new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: digits,
+      maximumFractionDigits: digits }).format(number);
+};
+const signedMoney = (value: number | string | null | undefined, digits = 4) => {
+  const number = Number(value);
+  return value == null || !Number.isFinite(number) ? "—" : `${number > 0 ? "+" : ""}${money(number, digits)}`;
+};
+const quantity = (value: number | string | null | undefined) => {
+  const number = Number(value);
+  return value == null || !Number.isFinite(number) ? "—" :
+    new Intl.NumberFormat("en-US", { maximumFractionDigits: 9 }).format(number);
+};
+const clock = (value: string | null | undefined) => value && !Number.isNaN(Date.parse(value)) ?
+  new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit", timeZone: "UTC" })
+    .format(new Date(value)) : "—";
+const fullTime = (value: string | null | undefined) => value && !Number.isNaN(Date.parse(value)) ?
+  new Intl.DateTimeFormat("en-GB", { dateStyle: "medium", timeStyle: "medium", timeZone: "UTC" })
+    .format(new Date(value)) + " UTC" : "—";
+const tone = (value: number | null) => value == null ? "" : value > 0 ? "positive" : value < 0 ? "negative" : "";
+
+function Activity({ fills, snapshotAt }: { fills: PaperFill[]; snapshotAt: string }) {
+  // SOURCE: UTC hours are calendar buckets; count one order once per hour
+  // even if several broker FILL activities belong to it.
+  const hourMs = 60 * 60 * 1000;
+  const latestHour = Math.floor(Date.parse(snapshotAt) / hourMs) * hourMs;
+  const buckets = Array.from({ length: 24 }, (_, index) => {
+    const start = latestHour - (23 - index) * hourMs;
+    const matching = fills.filter((fill) => {
+      const time = Date.parse(fill.transactionTime ?? "");
+      return time >= start && time < start + hourMs;
+    });
+    return { start, buys: new Set(matching.filter((fill) => fill.side === "buy").map((fill) => fill.orderId)).size,
+      sells: new Set(matching.filter((fill) => fill.side === "sell").map((fill) => fill.orderId)).size };
+  });
+  const maximum = Math.max(1, ...buckets.map((bucket) => bucket.buys + bucket.sells));
+  return <div className="activity" role="img" aria-label="Filled bot orders by UTC hour over the last 24 hours">
+    <div className="activity-bars">{buckets.map((bucket) => <div className="activity-slot" key={bucket.start}
+      title={`${clock(new Date(bucket.start).toISOString())} UTC · ${bucket.buys} buy orders · ${bucket.sells} sell orders`}>
+      <div className="activity-stack" style={{ height: `${((bucket.buys + bucket.sells) / maximum) * 100}%` }}>
+        <div className="activity-buy" style={{ flex: bucket.buys }} /><div className="activity-sell" style={{ flex: bucket.sells }} />
+      </div>
+    </div>)}</div>
+    <div className="activity-axis"><span>{clock(new Date(buckets[0].start).toISOString()).slice(0, 5)}</span>
+      <span>Filled orders / hour · UTC</span><span>{clock(new Date(latestHour).toISOString()).slice(0, 5)}</span></div>
+    <div className="legend"><span><i className="legend-buy" /> Buys</span><span><i className="legend-sell" /> Sells</span></div>
+  </div>;
 }
 
-function Fills({ rows, exits }: { rows: PaperFill[]; exits: boolean }) {
-  if (!rows.length) return <p className="empty">No {exits ? "sell fills" : "bot fills"} in the broker snapshot.</p>;
-  return <div className="table-scroll"><table><thead><tr><th>EXECUTED AT</th><th>SIDE</th><th>BTC</th><th>PRICE</th><th>{exits ? "GROSS PROCEEDS" : "GROSS NOTIONAL"}</th><th>ORDER ID</th></tr></thead><tbody>
-    {rows.map((f) => <tr key={f.id}><td data-label="Executed">{at(f.transactionTime)}</td><td data-label="Side"><span className={`side ${f.side}`}>{f.side.toUpperCase()}</span></td><td data-label="BTC">{qty(f.qty)}</td><td data-label="Price">{usd(f.price)}</td><td data-label={exits ? "Gross proceeds" : "Gross notional"}>{usd(Number(f.qty) * Number(f.price))}</td><td data-label="Order ID" className="order-id" title={f.clientOrderId}>{f.clientOrderId.slice(-16)}</td></tr>)}
-  </tbody></table></div>;
-}
-
-function Orders({ rows }: { rows: PaperOrder[] }) {
-  if (!rows.length) return <p className="empty">No bot orders in the broker snapshot.</p>;
-  return <div className="table-scroll"><table><thead><tr><th>SUBMITTED AT</th><th>SIDE</th><th>STATUS</th><th>FILLED BTC</th><th>AVG FILL</th><th>ORDER ID</th></tr></thead><tbody>
-    {rows.map((o) => <tr key={o.id}><td data-label="Submitted">{at(o.submittedAt)}</td><td data-label="Side"><span className={`side ${o.side}`}>{o.side.toUpperCase()}</span></td><td data-label="Status"><span className={`order-status ${o.status}`}>{o.status.replaceAll("_", " ")}</span></td><td data-label="Filled BTC">{qty(o.filledQty)}</td><td data-label="Avg fill">{usd(o.filledAvgPrice)}</td><td data-label="Order ID" className="order-id" title={o.clientOrderId}>{o.clientOrderId.slice(-16)}</td></tr>)}
-  </tbody></table></div>;
+function OrderInspector({ order, fills, telemetry }: { order: PaperOrder | undefined; fills: PaperFill[];
+  telemetry: PaperTelemetry }) {
+  if (!order) return <div className="inspect-empty">No bot order appears in this broker snapshot.</div>;
+  const executed = orderFillSummary(order, fills);
+  const decision = decisionForOrder(order, telemetry.journal);
+  const evidence = telemetry.journal.filter((event) => event.message.includes(order.clientOrderId)
+    && /^(SEND|ACK|reconcile) /.test(event.message)).slice(-3);
+  return <div className="inspector-body">
+    <div className="inspector-head"><span className={`side-pill ${order.side}`}>{order.side.toUpperCase()}</span>
+      <span className={`status-word ${order.status}`}>{orderDisplayStatus(order)}</span></div>
+    <h3>{order.side === "buy" ? "Entry order" : "Exit order"}</h3>
+    <p className="inspect-time">Submitted {fullTime(order.submittedAt)}</p>
+    <div className="inspect-stats"><div><small>Actual filled value</small><strong>{money(executed.notional)}</strong></div>
+      <div><small>Filled quantity</small><strong>{quantity(executed.quantity)} BTC</strong></div></div>
+    {order.status === "canceled" && executed.quantity > 0 && <p className="inspect-note">Part of this order filled. The broker canceled only the remainder.</p>}
+    {order.status === "canceled" && executed.quantity === 0 && <p className="inspect-note">No execution occurred, so this order did not create a trade.</p>}
+    <div className="decision-card"><span className="mini-label">ORDER REASON</span>
+      <p>{decision ? (order.side === "buy" ? "The current bid crossed above the earlier sampled ask."
+        : "The current ask crossed below the earlier sampled bid.") : "Decision trace is not present in the retained journal."}</p>
+      <dl><div><dt>Policy</dt><dd>{decision?.policy ?? "Unavailable"}</dd></div>
+        <div><dt>Quote time</dt><dd>{fullTime(decision?.quote_time)}</dd></div>
+        <div><dt>Decision latency</dt><dd>{decision?.receive_to_decision_ms ? `${decision.receive_to_decision_ms} ms` : "—"}</dd></div>
+        <div><dt>Trend context</dt><dd>{decision?.trend ?? "—"} · descriptive only</dd></div></dl>
+      <small>Candles and Markov probabilities did not authorize this order.</small>
+    </div>
+    <div className="event-trace"><span className="mini-label">BROKER TRACE</span>
+      {evidence.length ? evidence.map((event) => <p key={`${event.at}-${event.message}`}><time>{clock(event.at)}</time>
+        {event.message.replace(order.clientOrderId, "this order")}</p>) : <p>No retained journal messages for this order.</p>}
+    </div>
+    <code className="full-id">{order.clientOrderId}</code>
+  </div>;
 }
 
 export default function Home() {
   const [data, setData] = useState<Live | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [view, setView] = useState<"exits" | "fills" | "orders">("exits");
+  const [filter, setFilter] = useState<SideFilter>("all");
+  const [showAll, setShowAll] = useState(false);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   useEffect(() => {
     let active = true;
     const load = async () => {
@@ -61,42 +110,108 @@ export default function Home() {
       }
     };
     void load();
-    // GUESS: # UNCALIBRATED GUESS — display refresh cadence; source timestamps determine freshness.
+    // GUESS: # UNCALIBRATED GUESS — refresh the visible snapshot every 15s.
     const timer = window.setInterval(() => void load(), 15_000);
     return () => { active = false; window.clearInterval(timer); };
   }, []);
   const t = data?.telemetry ?? null;
-  const orders = useMemo(() => (t?.orders ?? []).filter((o) => o.clientOrderId.startsWith("jsbotbtc")).sort((a, b) => (b.submittedAt ?? "").localeCompare(a.submittedAt ?? "")), [t]);
-  const fills = useMemo(() => (t?.fills ?? []).filter((f) => f.clientOrderId.startsWith("jsbotbtc")).sort((a, b) => (b.transactionTime ?? "").localeCompare(a.transactionTime ?? "")), [t]);
-  const exits = fills.filter((f) => f.side === "sell");
-  const positions = (t?.positions ?? []).filter((p) => !p.protected);
-  const protectedPositions = (t?.positions ?? []).filter((p) => p.protected);
-  const openPnl = positions.length && positions.every((p) => p.unrealizedPl != null) ? positions.reduce((sum, p) => sum + Number(p.unrealizedPl), 0) : null;
-  // GUESS: # UNCALIBRATED GUESS — tolerate an idle signed heartbeat for 20 minutes.
+  const orders = useMemo(() => t ? botOrders(t) : [], [t]);
+  const fills = useMemo(() => t ? botFills(t) : [], [t]);
+  const accounting = useMemo(() => t ? botAccounting(t) : null, [t]);
+  const filtered = orders.filter((order) => filter === "all" || order.side === filter);
+  const selected = filtered.find((order) => order.id === selectedId) ?? filtered[0];
+  // GUESS: # UNCALIBRATED GUESS — initially show ten orders for scannability.
+  const visible = showAll ? filtered : filtered.slice(0, 10);
+  const btcPosition = t?.positions.find((position) => !position.protected &&
+    (position.symbol === "BTCUSD" || position.symbol === "BTC/USD"));
+  const openPnl = btcPosition?.unrealizedPl == null ? null : Number(btcPosition.unrealizedPl);
+  const filledOrders = orders.filter((order) => Number(order.filledQty) > 0);
+  const sellOrders = filledOrders.filter((order) => order.side === "sell");
+  // GUESS: # UNCALIBRATED GUESS — 20 minutes marks stale display data,
+  // not service uptime or a trading signal.
   const fresh = !!t && Date.now() - Date.parse(t.generatedAt) < 20 * 60_000;
-  const healthy = fresh && t?.service.active && t?.capture?.active;
-  const lastFill = fills[0];
-  const lastOrder = orders[0];
-  const lastDecision = t?.analysis?.lastDecision;
+  const healthy = !!t && fresh && t.service.active && t.capture?.active;
+
   return <main className="dashboard">
-    <header className="header"><div><p className="eyebrow">INDEPENDENT OCAML TRADING LAB</p><h1>Alpaca paper trading</h1><p className="subtitle">Broker positions, executions and order state from the autonomous Dublin service.</p></div><div className={`live-status ${healthy ? "ok" : "stale"}`}><span className="dot" />{healthy ? "PAPER AGENT RUNNING" : "DATA OR SERVICE NEEDS CHECK"}<small>Broker snapshot {at(t?.generatedAt)}</small></div></header>
+    <header className="topbar"><div className="brand"><div className="brand-mark">P<span>·</span>M</div>
+      <div><strong>Paper Market Lab</strong><small>Independent OCaml trading system</small></div></div>
+      <div className="topbar-right"><span className="topbar-venue">BTC / USD <b>ALPACA PAPER</b></span>
+        <span className={`health ${healthy ? "healthy" : "unhealthy"}`}><i />{healthy ? "AGENT ONLINE" : "CHECK DATA / SERVICE"}</span></div>
+    </header>
+
+    <section className="page-intro"><div><span className="eyebrow">LIVE PAPER OPERATIONS / DUBLIN</span>
+      <h1>Trading, with the evidence visible.</h1><p>Broker positions and executions, separated from experimental signal research.</p></div>
+      <div className="snapshot-time"><span>LATEST SIGNED BROKER SNAPSHOT</span><strong>{fullTime(t?.generatedAt)}</strong>
+        <small>Page updates automatically. Values are simulated.</small></div></section>
+
     {error && <div className="alert">{error}. Showing the last successful snapshot.</div>}
-    {!t && !error && <div className="alert">Loading signed broker data…</div>}
+    {!t && !error && <div className="loading">Loading signed broker data…</div>}
     {t && <>
-      <section className="summary" aria-label="Bot summary">
-        <div className="summary-card"><span>OPEN BOT EXPOSURE</span><strong>{usd(positions.reduce((sum, p) => sum + Number(p.marketValue ?? 0), 0))}</strong><small>{positions.length} BTC position{positions.length === 1 ? "" : "s"} · next buy target $100 · AAPL excluded</small></div>
-        <div className="summary-card"><span>OPEN P&amp;L · BROKER</span><strong className={tone(openPnl)}>{signed(openPnl)}</strong><small>Unrealized BTC mark from Alpaca</small></div>
-        <div className="summary-card"><span>COMPLETED SELL FILLS</span><strong>{exits.length}</strong><small>{fills.length} total bot fills</small></div>
-        <div className="summary-card"><span>LATEST BOT FILL</span><strong className="summary-time">{at(lastFill?.transactionTime)}</strong><small>{lastFill ? `${lastFill.side.toUpperCase()} ${qty(lastFill.qty)} BTC at ${usd(lastFill.price)}` : "No broker fill yet"}</small></div>
+      <section className="hero-grid" aria-label="Paper account overview">
+        <div className="result-panel"><div className="result-top"><span className="eyebrow">INDICATIVE BOT CASH + MARK / BTC ONLY</span>
+          <span className="result-badge">{accounting?.flat ? "FLAT" : "OPEN INVENTORY"}</span></div>
+          <strong className={`result-number ${tone(accounting?.markedResult ?? null)}`}>
+            {accounting?.available ? signedMoney(accounting.markedResult) : "Unavailable"}</strong>
+          <p className="result-caption">{accounting?.flat ? "Executed cash difference while BTC is flat" :
+            "Executed cash flows plus broker BTC market value"}</p>
+          <div className="result-ledger"><div><span>Buy executions</span><b>{accounting?.available ? money(accounting.buyNotional) : "—"}</b></div>
+            <div><span>Sell executions</span><b>{accounting?.available ? money(accounting.sellNotional) : "—"}</b></div>
+            <div><span>Open BTC mark</span><b>{accounting?.available ? money(accounting.marketValue) : "—"}</b></div></div>
+          <div className="result-caution"><span>ACCOUNTING STATUS</span><p>{accounting?.available ?
+            "Indicative paper result, not verified net P&L. Buy-side BTC quantity reductions may already reflect fees; CFEE/FEE activities can post later. An open mark is not an executable exit price."
+            : accounting?.reason ?? "Broker result unavailable."}</p></div>
+        </div>
+        <div className="position-panel"><div className="panel-heading"><span className="eyebrow">CURRENT BTC POSITION</span>
+          <span className={`position-state ${btcPosition ? "is-open" : ""}`}>{btcPosition ? "● OPEN" : "○ FLAT"}</span></div>
+          <strong className="position-value">{btcPosition ? money(btcPosition.marketValue) : "$0.00"}</strong>
+          <span className="position-sub">{btcPosition ? `${quantity(btcPosition.qty)} BTC held` : "No BTC exposure at this snapshot"}</span>
+          <div className="position-pnl"><span>Broker unrealized P&amp;L</span><b className={tone(openPnl)}>{btcPosition ? signedMoney(openPnl) : "—"}</b></div>
+          <div className="position-facts"><div><span>Entry</span><strong>{money(btcPosition?.avgEntryPrice)}</strong></div>
+            <div><span>Broker mark</span><strong>{money(btcPosition?.currentPrice)}</strong></div></div>
+          <div className="risk-strip"><span>BASELINE BUY <b>$100</b></span><span>BTC EXPOSURE CAP <b>$500</b></span></div>
+        </div>
       </section>
-      <section className="panel" id="open"><div className="section-head"><div><p className="eyebrow">01 / CURRENT EXPOSURE</p><h2>Open bot positions</h2></div><span className="source">Alpaca /v2/positions</span></div><Positions rows={positions} /><p className="panel-note">The BTC quote is the price of one whole coin; bot exposure is the market value of its fractional holding. Broker mark and unrealized P&amp;L are snapshots, not executable exit prices. {protectedPositions.length ? `${protectedPositions.map((p) => `${p.symbol} ${qty(p.qty)}`).join(", ")} is pre-existing and excluded from bot exposure and P&L.` : "No protected positions were returned."}</p></section>
-      <section className="panel" id="closed"><div className="section-head"><div><p className="eyebrow">02 / EXECUTION HISTORY</p><h2>Completed sells and bot activity</h2></div><div className="tabs"><button className={view === "exits" ? "active" : ""} onClick={() => setView("exits")}>Sell fills ({exits.length})</button><button className={view === "fills" ? "active" : ""} onClick={() => setView("fills")}>All fills ({fills.length})</button><button className={view === "orders" ? "active" : ""} onClick={() => setView("orders")}>Orders ({orders.length})</button></div></div>{view === "orders" ? <Orders rows={orders} /> : <Fills rows={view === "exits" ? exits : fills} exits={view === "exits"} />}<p className="panel-note">{view === "exits" ? "Each row is an actual Alpaca paper sell fill. Gross proceeds exclude sell fees; several fills may belong to one order." : view === "fills" ? "Actual Alpaca FILL activities filtered to this bot. AAPL is excluded." : "Orders include cancellations and partial fills. A canceled order is not a completed trade."} {t.fillsComplete && t.ordersComplete ? "Broker history pagination completed." : "Broker history may be incomplete; counts are lower bounds."}</p></section>
-      <section className="secondary-grid">
-        <div className="panel compact"><p className="eyebrow">03 / RESULT ACCOUNTING</p><h2>Closed-trade net P&amp;L</h2><strong className="unavailable">Not yet verified</strong><p>This monitor does not yet reconcile Alpaca CFEE/FEE activities, which may post after trades. The table shows actual sell fills and gross proceeds. It does not invent a net realized result.</p><a href="https://docs.alpaca.markets/us/docs/crypto-fees" target="_blank" rel="noreferrer">How Alpaca posts crypto fees ↗</a></div>
-        <div className="panel compact"><p className="eyebrow">04 / AGENT STATE</p><h2>Why there may be no new order</h2><p><b>Mode:</b> {t.service.mode} · <b>Capture:</b> {t.capture?.active ? "connected" : "not confirmed"}</p><p><b>Paper size:</b> $100 experimental baseline · $500 BTC exposure ceiling. The requested $50/$500 probability tiers await calibration.</p><p><b>Latest completed 5m bar (start):</b> {at(t.analysis?.fiveMinute?.lastBarAt)} · <b>EMA trend:</b> {t.analysis?.fiveMinute?.trend ?? "unavailable"}</p><p><b>Last candidate:</b> {at(lastDecision?.observedAt)} · <b>Policy:</b> {lastDecision?.policy ?? "unavailable"}</p><p><b>Last order:</b> {lastOrder ? `${lastOrder.side.toUpperCase()} ${lastOrder.status} at ${at(lastOrder.submittedAt)}` : "none"}</p><p>The experimental rule requires a quote move across the spread at its sample and a reconciled position. A healthy market stream can produce no qualifying order. Candle and trend readings are descriptive and do not authorize orders.</p></div>
-      </section>
-      <details className="panel audit"><summary>Engineering audit · account context and recent bot events</summary><div className="audit-body"><p>Account equity {usd(t.account.equity)} includes protected AAPL and is not bot P&amp;L. The page has no order controls. Signed Dublin snapshot: {at(t.generatedAt)}. Last market event: {at(t.capture?.lastEventAt)}.</p><ul>{t.journal.filter((e) => /^(SEND|ACK|reconcile|HOLD|HALT|HOT_DECISION) /.test(e.message)).slice(-12).reverse().map((e, i) => <li key={`${e.at}-${i}`}><time>{at(e.at)}</time> {e.message}</li>)}</ul><a href="https://github.com/coder058/jane-street-ocaml-trading-lab" target="_blank" rel="noreferrer">Source code and runbook ↗</a></div></details>
+
+      <section className="quick-stats"><div><span>ORDERS WITH A FILL</span><strong>{filledOrders.length}</strong><small>{sellOrders.length} sell orders · {fills.length} individual fill records</small></div>
+        <div><span>LATEST ORDER</span><strong>{clock(orders[0]?.submittedAt)} <em>UTC</em></strong><small>{orders[0] ? `${orders[0].side.toUpperCase()} · ${orderDisplayStatus(orders[0])}` : "No bot order"}</small></div>
+        <div><span>POLICY SENDING ORDERS</span><strong className="policy-name">{t.analysis?.lastDecision?.policy ?? "Unavailable"}</strong><small>Murphy / candles / Markov are read-only</small></div></section>
+
+      <section className="work-grid" id="orders"><div className="orders-panel"><div className="section-title"><div><span className="eyebrow">EXECUTION DESK</span>
+        <h2>Orders &amp; fills</h2><p>One row per broker order. Partial fills stay attached to their order.</p></div>
+        <span className="section-count">{orders.length} ORDERS</span></div>
+        <div className="filter-row" role="group" aria-label="Filter orders">
+          {(["all", "buy", "sell"] as SideFilter[]).map((side) => <button key={side} type="button"
+            className={filter === side ? "selected" : ""} onClick={() => { setFilter(side); setShowAll(false); }}>
+            {side === "all" ? "All orders" : side === "buy" ? "Buys" : "Sells"}</button>)}
+          <span>{filtered.length} in filter</span></div>
+        <div className="order-list">{visible.map((order) => {
+          const executed = orderFillSummary(order, fills);
+          return <button type="button" key={order.id} className={`order-row ${selected?.id === order.id ? "active" : ""}`}
+            onClick={() => setSelectedId(order.id)} aria-pressed={selected?.id === order.id}>
+            <span className={`order-side ${order.side}`}>{order.side === "buy" ? "↗" : "↙"}</span>
+            <span className="order-main"><strong>{order.side.toUpperCase()} BTC</strong><small>{orderDisplayStatus(order)}</small></span>
+            <span className="order-amount"><strong>{money(executed.notional)}</strong><small>{quantity(executed.quantity)} BTC filled</small></span>
+            <span className="order-when">{clock(order.submittedAt)}<small>UTC</small></span>
+          </button>;
+        })}{!visible.length && <p className="empty">No {filter === "all" ? "bot" : filter} orders in this snapshot.</p>}</div>
+        {filtered.length > 10 && <button type="button" className="show-more" onClick={() => setShowAll(!showAll)}>
+          {showAll ? "Show recent orders" : `Show all ${filtered.length} orders`} <span aria-hidden="true">↗</span></button>}
+      </div>
+      <aside className="inspector-panel"><div className="section-title compact-title"><div><span className="eyebrow">ORDER INSPECTOR</span>
+        <h2>What happened?</h2></div></div><OrderInspector order={selected} fills={fills} telemetry={t} /></aside></section>
+
+      <section className="bottom-grid"><div className="activity-panel"><div className="section-title"><div><span className="eyebrow">MARKET ACTIVITY</span>
+        <h2>Bot executions over time</h2><p>Unique filled orders by UTC hour. Counts do not imply profit.</p></div></div>
+        <Activity fills={fills} snapshotAt={t.generatedAt} /></div>
+        <div className="research-panel"><span className="eyebrow">RESEARCH / NO ORDER AUTHORITY</span><h2>What drives trades?</h2>
+          <p>The active OCaml rule is <b>{t.analysis?.lastDecision?.policy ?? "unavailable"}</b>. It checks whether a sampled BTC quote crossed the earlier spread. The latest closed-bar trend is <b>{t.analysis?.fiveMinute?.trend ?? "unavailable"}</b>, but it does not trigger orders.</p>
+          <div className="research-rows"><div><span>Markov / candle model</span><strong>Shadow only</strong></div>
+            <div><span>Probability size tiers</span><strong>Not calibrated</strong></div>
+            <div><span>Execution venue</span><strong>Alpaca paper</strong></div></div>
+          <a href="https://github.com/coder058/jane-street-ocaml-trading-lab/blob/main/docs/POLICY-ATTEMPTS.md" target="_blank" rel="noreferrer">Read the policy evidence ↗</a></div></section>
+
+      <footer><span>Independent project · simulated Alpaca execution · AAPL is protected and excluded from bot accounting.</span>
+        <span>Paper fills and midpoint studies do not establish a profitable live strategy.</span></footer>
     </>}
-    <footer>Independent engineering experiment · Alpaca paper only · Paper fills do not establish a profitable live strategy.</footer>
   </main>;
 }

@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Jane Street OCaml Trading Lab · Paper Monitor",
+  title: "OCaml Paper Market Lab · Live Monitor",
   description: "Live read-only evidence for an independent OCaml Alpaca paper trading experiment.",
 };
 
