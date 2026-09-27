@@ -17,6 +17,9 @@ and is **not** a performance result for this bot.
 
 - Polls Alpaca's public BTC/USD quote endpoint and logs timestamp, bid, ask,
   and spread. A service on the author's Dublin VPS runs this monitor now.
+- In disarmed monitor mode, reads the paper broker state and records explicit
+  `SHADOW` decisions from the uncalibrated diagnostic rule. These are
+  hypothetical readings, never submitted orders or evidence of edge.
 - A deliberately simple cross-spread price-move rule can submit small IOC
   limit orders to the exact Alpaca **paper** origin after explicit arming.
 - Before every submission it checks paper account status and buying power,

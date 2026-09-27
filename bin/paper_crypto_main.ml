@@ -186,6 +186,27 @@ let try_order (previous : Paper_crypto.quote) (current : Paper_crypto.quote) =
                    log "ACK id=%s status=%s" id
                      (Option.value (Paper_broker.order_status order) ~default:"unknown")))))
 
+let shadow_decision (previous : Paper_crypto.quote) (current : Paper_crypto.quote) =
+  match broker_state () with
+  | Error e -> log "SHADOW unavailable broker_state=%s no_order=true" e
+  | Ok (_, position_qty, has_open_order, _) ->
+    let owned = read_line owned_path <> None in
+    if position_qty > 0. && not owned then
+      log "SHADOW blocked existing BTC position is not bot-owned no_order=true"
+    else if position_qty = 0. && owned then
+      log "SHADOW blocked ownership marker conflicts with broker no_order=true"
+    else
+      let action = Paper_crypto.decide ~previous ~current ~position_qty
+          ~has_open_order in
+      let reading = match action with
+        | Paper_crypto.Buy -> "hypothetical_buy"
+        | Paper_crypto.Sell -> "hypothetical_sell"
+        | Paper_crypto.Hold reason -> "hold:" ^ reason in
+      (* # SOURCE: monitor mode is read-only; the diagnostic rule is
+         uncalibrated and must not be represented as a tradable signal. *)
+      log "SHADOW diagnostic=%s quote_time=%s no_order=true uncalibrated=true"
+        reading current.timestamp
+
 let run ~trade ~once =
   if not (Sys.file_exists state_dir) then Unix.mkdir state_dir 0o700;
   (* # SOURCE: owner-only directory protects the order journal. *)
@@ -202,6 +223,7 @@ let run ~trade ~once =
     in
     (match previous, current with
      | Some p, Some q when armed -> try_order p q
+     | Some p, Some q -> shadow_decision p q
      | _ -> ());
     if not once then (
       (* # GUESS: 30 seconds keeps the diagnostic loop below typical REST
