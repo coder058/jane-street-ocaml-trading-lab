@@ -95,11 +95,24 @@ function OrderTable({ orders }: { orders: PaperOrder[] }) {
 }
 
 function Journal({ events }: { events: JournalEvent[] }) {
+  const [filter, setFilter] = useState<"decisions" | "all" | "quotes">("decisions");
+  const [page, setPage] = useState(0);
+  // GUESS: # UNCALIBRATED GUESS — forty rows per page keeps the event log usable;
+  // this is a display limit, not a trading or retention rule.
+  const pageSize = 40;
+  const matching = events.filter((event) => filter === "all" ||
+    (event.message.startsWith("QUOTE ") ? filter === "quotes" : filter === "decisions"));
+  const lastPage = Math.max(0, Math.ceil(matching.length / pageSize) - 1);
+  const currentPage = Math.min(page, lastPage);
   if (!events.length) return <div className="empty-state">Waiting for signed events from the Dublin service.</div>;
-  return <div className="journal-list">{events.map((event, index) => {
+  return <><div className="journal-controls"><div className="journal-filters">{(["decisions", "all", "quotes"] as const).map((choice) =>
+    <button key={choice} className={filter === choice ? "active" : ""} onClick={() => { setFilter(choice); setPage(0); }}>
+      {choice === "decisions" ? "Decisions & orders" : choice === "all" ? "All events" : "Quotes"}
+    </button>)}</div><span>{matching.length} of {events.length} events{filter === "all" ? "" : ` · ${filter}`}</span></div>
+  <div className="journal-list">{matching.slice(currentPage * pageSize, (currentPage + 1) * pageSize).map((event, index) => {
     const kind = event.message.split(" ")[0];
-    return <div className="journal-event" key={`${event.at}-${index}`}><span className="journal-rail" /><time>{time(event.at)}</time><span className={`event-kind kind-${kind.toLowerCase()}`}>{kind}</span><p>{event.message.slice(kind.length).trim()}</p></div>;
-  })}</div>;
+    return <div className="journal-event" key={`${event.at}-${currentPage}-${index}`}><span className="journal-rail" /><time>{time(event.at)}</time><span className={`event-kind kind-${kind.toLowerCase()}`}>{kind}</span><p>{event.message.slice(kind.length).trim()}</p></div>;
+  })}</div><div className="journal-pager"><button disabled={currentPage === 0} onClick={() => setPage(currentPage - 1)}>← Newer</button><span>Page {currentPage + 1} of {lastPage + 1}</span><button disabled={currentPage === lastPage} onClick={() => setPage(currentPage + 1)}>Older →</button></div></>;
 }
 
 export default function Home() {
