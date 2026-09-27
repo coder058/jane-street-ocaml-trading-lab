@@ -42,9 +42,10 @@ MAX_FILL_PAGES = 20
 # GUESS: # UNCALIBRATED GUESS — retain 4,000 recent journal lines in each
 # snapshot; older lines remain on the VPS and must be archived separately.
 MAX_JOURNAL_LINES = 4_000
-# GUESS: # UNCALIBRATED GUESS — a fifteen-minute idle heartbeat bounds Blob
-# operations while order events upload on the next timer run.
-HEARTBEAT_SECONDS = 15 * 60
+# GUESS: # UNCALIBRATED GUESS — a five-minute idle heartbeat makes the
+# read-only dashboard visibly current while limiting Blob writes. Measure
+# actual storage and transfer usage before tightening it further.
+HEARTBEAT_SECONDS = 5 * 60
 
 
 def read_env(path: Path) -> dict[str, str]:
