@@ -64,6 +64,14 @@ let midpoint q = (q.bid +. q.ask) /. 2.
 let spread_bps q = (q.ask -. q.bid) /. midpoint q *. 10_000.
 (* # SOURCE: one basis point is 1/10,000, by definition. *)
 
+(* # SOURCE: the earlier paper REST loop sampled quotes every 30 seconds;
+   reuse that cadence on the WebSocket, without treating it as a calibrated edge. *)
+let sample_interval_ns = 30_000_000_000
+
+let sample_due ~reference_received_ns ~current_received_ns =
+  current_received_ns >= reference_received_ns
+  && current_received_ns - reference_received_ns >= sample_interval_ns
+
 let is_dust ~price ~qty =
   (* # SOURCE: Alpaca documents a $10 minimum for USD crypto-pair orders. *)
   positive_finite price && Float.is_finite qty && qty >= 0.

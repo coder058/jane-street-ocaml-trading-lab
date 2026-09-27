@@ -8,9 +8,11 @@ still requires both `--paper` and that environment gate. The older REST quote
 poll remains available as a diagnostic fallback.
 The only trading origin is `https://paper-api.alpaca.markets`.
 
-The decision is deliberately simple: buy after a live bid rises above the
-previous live ask; sell the bot-owned position after a live ask falls below the
-previous bid. This cross-spread rule has **not** been calibrated or shown to
+The decision is deliberately simple: compare a live quote with a reference
+quote sampled at the earlier REST loop's 30-second cadence; buy when the new
+bid rises above the reference ask, or sell the bot-owned position when the new
+ask falls below the reference bid. Every WebSocket quote is still received,
+validated and archived. This cross-spread rule has **not** been calibrated or shown to
 have an edge. The $20 diagnostic order is a guess within the user's $2–$30
 range and above Alpaca's documented $10 crypto minimum. The bot uses IOC limit
 orders, one pending order at a time, a durable pre-submission journal, open
@@ -69,8 +71,10 @@ September; each had a broker acknowledgement and terminal reconciliation.
 Its buy attempts reached $299.999246395 of the then-active $300 daily budget.
 That daily limit was removed after the user's clarification; the $30 BTC
 position/order cap, pending-order reconciliation, and paper-only endpoint remain. The
-WebSocket path began at 13:00 UTC; a new WebSocket-triggered order had not yet
-been observed when this runbook was updated. The OCaml consumer has shown live
+WebSocket path began at 13:00 UTC. Its original adjacent-quote rule produced
+no candidate among 1,348 quote pairs audited from 13:16:05–13:38:43 UTC;
+the earlier 30-second cadence found six descriptive crosses among 34 samples.
+The WebSocket policy was changed to that cadence at 13:40 UTC. The OCaml consumer has shown live
 quotes, closed bars and a 5m context loaded from 352 contiguous Alpaca bars.
 
 Paper fills are simulated from quotes. They do not establish live fill quality

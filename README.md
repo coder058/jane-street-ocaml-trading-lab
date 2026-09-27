@@ -20,8 +20,10 @@ and is **not** a performance result for this bot.
   It sends quotes and bars to OCaml over a local Unix socket. Session IDs and
   a per-consumer sequence expose reconnects and lost datagrams.
 - The OCaml service is running in `PAPER_ORDER` mode with `PAPER_ORDERS=1` on
-  Dublin as of 27 September 2026. It examines each received quote, records
-  the candidate and starts a separate worker for broker I/O so the feed
+  Dublin as of 27 September 2026. It receives each quote and evaluates the
+  cross-spread rule against a reference quote sampled at the earlier REST
+  service's 30-second cadence. It records each sample and starts a separate
+  worker for broker I/O on candidates so the feed
   receiver can continue. A deliberately simple, **uncalibrated** cross-spread
   price-move rule submits IOC limits only to the Alpaca **paper** origin.
 - OCaml describes Alpaca closed-minute bars with selected Pattern Forge style
@@ -54,9 +56,11 @@ UTC on 27 September, the earlier 30-second REST version sent 20 paper orders,
 received 20 broker acknowledgements and reconciled all 20. It used
 $299.999246395 of a then-active $300 daily buy-attempt budget; the broker later showed
 zero BTC, no open order and the pre-existing 10 AAPL shares. The WebSocket
-order path started at 13:00 UTC; its first quote, five-minute context and
-service health were observed, but a new WebSocket-triggered order has not yet
-been observed. Pattern Forge and Energy Monitor remain descriptive context in
+order path started at 13:00 UTC. An audit of 1,349 captured quotes from
+13:16:05–13:38:43 UTC found zero crosses among adjacent quotes and six crosses
+among 34 non-overlapping 30-second samples. This motivated restoring the
+earlier diagnostic cadence on the WebSocket at 13:40 UTC; it is not an edge
+estimate. Pattern Forge and Energy Monitor remain descriptive context in
 their own domains. See [the live-paper runbook](docs/LIVE-PAPER.md) and
 [the evidence and strategy limits](docs/pretrade-evidence.md).
 

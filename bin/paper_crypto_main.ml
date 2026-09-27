@@ -341,7 +341,7 @@ let run_hot_stream ~trade =
     (* GUESS: # UNCALIBRATED GUESS — 8 KiB holds a compact market quote; any
        truncation must fail JSON parsing and halt this consumer. *)
     let active_session = ref None and last_sequence = ref 0 in
-    let previous_quote : Paper_crypto.quote option ref = ref None in
+    let previous_quote : (Paper_crypto.quote * int) option ref = ref None in
     let warm_state, warm_reading = warmup_from_capture () in
     let technical = ref warm_state in
     let last_reading : Technical.reading option ref = ref warm_reading in
@@ -455,9 +455,14 @@ let run_hot_stream ~trade =
                       current.timestamp current.bid current.ask
                       (Paper_crypto.spread_bps current));
                   (match !previous_quote with
-                   | Some previous ->
+                   | Some (previous, reference_received_ns)
+                     when Paper_crypto.sample_due ~reference_received_ns
+                       ~current_received_ns:received_ns ->
                      let candidate = current.bid > previous.ask ||
                        current.ask < previous.bid in
+                     log "HOT_SAMPLE reference_quote_time=%s quote_time=%s window_ms=%d candidate=%b policy=quote_cross_30s_v1"
+                       previous.timestamp current.timestamp
+                       ((received_ns - reference_received_ns) / 1_000_000) candidate;
                      if candidate then (
                        let decision_ns = int_of_float (Unix.gettimeofday () *. 1_000_000_000.) in
                        let context_frame, context_time, context_trend,
@@ -470,7 +475,7 @@ let run_hot_stream ~trade =
                            "1Min", reading.bar.timestamp, reading.trend,
                            "stream"
                          | None, None -> "none", "none", "warming", "none" in
-                       log "HOT_DECISION quote_time=%s receive_to_decision_ms=%.3f candidate=true policy=quote_cross_v1 context_frame=%s context_bar=%s trend=%s context_retrieved=%s probability=unknown"
+                       log "HOT_DECISION quote_time=%s receive_to_decision_ms=%.3f candidate=true policy=quote_cross_30s_v1 context_frame=%s context_bar=%s trend=%s context_retrieved=%s probability=unknown"
                          current.timestamp
                          (float_of_int (decision_ns - received_ns) /. 1_000_000.)
                          context_frame context_time context_trend context_retrieved;
@@ -481,9 +486,10 @@ let run_hot_stream ~trade =
                              (age_ns / 1_000_000)
                          else if armed then try_order ~received_ns previous current
                          else shadow_decision previous current));
-                     previous_quote := Some current
+                     previous_quote := Some (current, received_ns)
+                   | Some _ -> ()
                    | None ->
-                     previous_quote := Some current;
+                     previous_quote := Some (current, received_ns);
                      log "HOT_BASELINE quote_time=%s" current.timestamp)))
          else if kind = "b" then
            (match event with

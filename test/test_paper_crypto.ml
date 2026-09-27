@@ -20,6 +20,14 @@ let () =
            ~has_open_order:true = Hold "broker has an open order") "open-order guard";
   check (Paper_crypto.decide ~previous:up ~current:old ~position_qty:0.
            ~has_open_order:false = Hold "market quote has not advanced") "stale guard";
+  (* # SOURCE: synthetic receipt times exercise the historical 30-second
+     sample cadence; these are not observed market latencies. *)
+  check (not (Paper_crypto.sample_due ~reference_received_ns:0
+           ~current_received_ns:29_999_999_999)) "do not sample early";
+  check (Paper_crypto.sample_due ~reference_received_ns:0
+           ~current_received_ns:30_000_000_000) "sample at prior cadence";
+  check (not (Paper_crypto.sample_due ~reference_received_ns:30_000_000_000
+           ~current_received_ns:0)) "reject backward receipt time";
   check (Paper_crypto.buy_qty ~ask:84_000. <> None) "valid qty";
   check (Paper_crypto.buy_qty ~ask:0. = None) "invalid ask";
   (* # SOURCE: $10 Alpaca USD crypto minimum; synthetic values test boundary. *)
