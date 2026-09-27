@@ -238,7 +238,8 @@ def significant_digest(events: list[dict[str, str]], service: dict[str, object],
     orders = [{key: order.get(key) for key in ("id", "status", "filledQty")}
               for order in document["orders"]]
     fills = [fill["id"] for fill in document["fills"]]
-    payload = json.dumps({"service": service, "events": meaningful,
+    # SOURCE: a changed public position projection needs one immediate signed upload.
+    payload = json.dumps({"projection": "position_pnl_v1", "service": service, "events": meaningful,
                           "orders": orders, "fills": fills}, sort_keys=True)
     return hashlib.sha256(payload.encode()).hexdigest()
 
@@ -269,6 +270,10 @@ def snapshot(credentials: dict[str, str], service: dict[str, object],
             "side": str(position.get("side", "")),
             "avgEntryPrice": str(position.get("avg_entry_price", "")),
             "marketValue": position.get("market_value"),
+            "costBasis": position.get("cost_basis"),
+            "currentPrice": position.get("current_price"),
+            "unrealizedPl": position.get("unrealized_pl"),
+            "unrealizedPlpc": position.get("unrealized_plpc"),
             "protected": position.get("symbol") not in ("BTCUSD", "BTC/USD"),
         } for position in positions],
         "orders": orders,

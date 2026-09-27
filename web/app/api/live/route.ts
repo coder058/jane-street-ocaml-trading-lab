@@ -1,13 +1,11 @@
-import { getMarket } from "@/lib/market";
 import { getTelemetry } from "@/lib/telemetry";
 
 export const runtime = "nodejs";
 
 export async function GET() {
-  const [market, telemetry] = await Promise.all([getMarket(), getTelemetry()]);
+  const telemetry = await getTelemetry();
   return Response.json({
     generatedAt: new Date().toISOString(),
-    market,
     telemetry,
   }, {
     headers: {

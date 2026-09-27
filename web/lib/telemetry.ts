@@ -32,6 +32,10 @@ export type PaperPosition = {
   side: string;
   avgEntryPrice: string;
   marketValue: string | null;
+  costBasis?: string | null;
+  currentPrice?: string | null;
+  unrealizedPl?: string | null;
+  unrealizedPlpc?: string | null;
   protected: boolean;
 };
 
