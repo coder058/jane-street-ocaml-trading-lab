@@ -19,11 +19,18 @@ Jane Street or Alpaca. It does not claim a profitable strategy.
   buy attempts; sell orders can still reduce exposure.
 - Credentials are sent to `curl` through standard input rather than argv;
   credential variables are stripped from the child process environment.
+- An append-only local journal records quotes, decisions and broker responses.
+- `--research-once` reads closed BTC, ETH and SOL candles from Pattern Forge
+  for descriptive 5m, 1h and 1d context. This path cannot authorize orders.
+- `web/` contains the Vercel paper monitor. Dublin exports broker snapshots
+  and the journal with Ed25519 signatures; Vercel never receives Alpaca keys.
 
 The strategy rule and $20 diagnostic size are **uncalibrated guesses**. They
-exist to exercise a safe order lifecycle, not to imply an edge. Pattern Forge
-and Energy Monitor provide useful descriptive data in their own domains, but
-their outputs do not authorize BTC trades here. See [the live-paper runbook](docs/LIVE-PAPER.md).
+existed to exercise an order lifecycle, not to imply an edge. The user asked
+for evidence before further trades, so `PAPER_ORDERS=0` on Dublin as of 27
+September 2026. The service continues in MONITOR mode. Pattern Forge and
+Energy Monitor provide useful descriptive data in their own domains, but their
+outputs do not authorize BTC trades here. See [the live-paper runbook](docs/LIVE-PAPER.md).
 
 ## Build and test
 
@@ -34,14 +41,13 @@ opam exec -- dune runtest --force
 opam exec -- dune exec bin/paper_crypto_main.exe -- --once
 ```
 
-The `--once` mode reads one public quote and never places an order. The
-continuous Dublin service runs `--paper` with valid **paper** keys and
-`PAPER_ORDERS=1`. On 27 September 2026, Alpaca accepted one BTC/USD IOC buy
-attempt. It was canceled after a partial fill of 0.000000020 BTC; the net
-position reported separately was 0.000000019 BTC. This is a paper execution
-plumbing check, not a meaningful performance result. The bot now treats such
-sub-$10 holdings as dust and will not submit an invalid sell. The account's
-existing 10-share AAPL position is outside the bot's BTC/USD order path.
+The `--once` mode reads one public quote and never places an order. On 27
+September 2026, Alpaca accepted a BTC/USD IOC buy that was canceled after a
+partial fill of 0.000000020 BTC; the net position was 0.000000019 BTC. Later
+paper buys and sells were filled and reconciled. These are execution plumbing
+checks, not performance results. The bot handles sub-$10 dust. The account's
+existing 10-share AAPL position is outside its BTC/USD order path. The service
+is now disarmed while strategy quality, costs and data are reviewed.
 
 Paper fills are simulated and can differ from live execution. Even a working
 paper order loop may lose money live after fees, spread, slippage, and adverse

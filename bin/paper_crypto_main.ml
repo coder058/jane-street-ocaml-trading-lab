@@ -11,6 +11,7 @@ let state_dir =
 let pending_path = Filename.concat state_dir "pending"
 let owned_path = Filename.concat state_dir "owned"
 let buy_budget_path = Filename.concat state_dir "buy-budget"
+let event_path = Filename.concat state_dir "events.jsonl"
 
 let read_line path =
   if not (Sys.file_exists path) then None
@@ -52,9 +53,19 @@ let buy_spent_today () =
 let log fmt =
   Printf.ksprintf (fun s ->
     let tm = Unix.gmtime (Unix.time ()) in
-    Printf.printf "%04d-%02d-%02dT%02d:%02d:%02dZ %s\n%!"
+    let timestamp = Printf.sprintf "%04d-%02d-%02dT%02d:%02d:%02dZ"
       (tm.tm_year + 1900) (tm.tm_mon + 1) tm.tm_mday
-      tm.tm_hour tm.tm_min tm.tm_sec s) fmt
+      tm.tm_hour tm.tm_min tm.tm_sec in
+    Printf.printf "%s %s\n%!" timestamp s;
+    let row = Yojson.Safe.to_string (`Assoc [
+      "at", `String timestamp; "message", `String s ]) in
+    (* # SOURCE: append-only, owner-only local event journal; fsync before
+       submitting another paper order. *)
+    let oc = open_out_gen [ Open_creat; Open_append; Open_wronly ] 0o600 event_path in
+    Fun.protect ~finally:(fun () -> close_out_noerr oc) (fun () ->
+      output_string oc (row ^ "\n");
+      flush oc;
+      Unix.fsync (Unix.descr_of_out_channel oc))) fmt
   (* # SOURCE: Unix tm_year counts from 1900; tm_mon starts at zero. *)
 
 let client_id side timestamp =
