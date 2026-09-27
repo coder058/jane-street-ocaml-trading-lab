@@ -22,6 +22,24 @@ order/account/position checks, a paper-only host, and an ownership marker. It
 refuses an existing BTC position it cannot attribute to itself. It does not
 place live orders.
 
+## Broker cash-flow checkpoint, 27 September 2026
+
+At **18:25:38 UTC**, the signed monitor snapshot had complete broker order and
+fill pagination and no open BTC position. The read-only
+[fill cash-flow audit](../research/paper_fill_cash_flow.py) identified 64 bot
+orders and 74 bot fills (39 buy fills, 35 sell fills). It summed
+**$452.89327845983** of executed buy notional and **$451.77872160523** of
+executed sell notional: **−$1.11455685460** of filled cash difference before
+separately posted fee activities. AAPL was excluded. Alpaca returned zero
+`CFEE` and `FEE` activities when queried at about 18:26 UTC, and documents
+that crypto fees can post at the end of the day. Thus **net P&L is not yet
+verified**, and the paper result does not predict live profitability.
+
+At 18:27 UTC, after that flat checkpoint, the new $100-target policy submitted
+a buy for 0.001180659 BTC. Alpaca filled only 0.000471840 BTC and canceled the
+remainder; the reconciled BTC position was 0.000470659 BTC, with no open or
+pending order. This was a partial paper fill, **not a $100 completed buy**.
+
 Alpaca may partially fill an IOC order and cancel its remainder. The first
 observed order on 27 September 2026 filled 0.000000020 BTC, leaving a net
 0.000000019 BTC position. The bot keeps ownership of that residual, suppresses
