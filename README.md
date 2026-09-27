@@ -30,7 +30,8 @@ existed to exercise an order lifecycle, not to imply an edge. The user asked
 for evidence before further trades, so `PAPER_ORDERS=0` on Dublin as of 27
 September 2026. The service continues in MONITOR mode. Pattern Forge and
 Energy Monitor provide useful descriptive data in their own domains, but their
-outputs do not authorize BTC trades here. See [the live-paper runbook](docs/LIVE-PAPER.md).
+outputs do not authorize BTC trades here. See [the live-paper runbook](docs/LIVE-PAPER.md)
+and [the pre-trade evidence gate](docs/pretrade-evidence.md).
 
 ## Build and test
 
