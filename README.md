@@ -55,7 +55,9 @@ and is **not** a performance result for this bot.
 The quote-cross strategy rule remains **uncalibrated**. The user specified the
 new $100 baseline paper size on 27 September; neither its risk nor edge has
 been calibrated. The requested Murphy/candlestick/Markov probability strategy
-has no order authority yet. Between 08:36 and 10:26
+has no order authority yet. A [read-only Markov candle audit](research/markov_candle_audit.py)
+measures next-bar transitions on Alpaca US BTC five-minute history and reports
+its limits in [the evidence note](docs/pretrade-evidence.md). Between 08:36 and 10:26
 UTC on 27 September, the earlier 30-second REST version sent 20 paper orders,
 received 20 broker acknowledgements and reconciled all 20. It used
 $299.999246395 of a then-active $300 daily buy-attempt budget; the broker later showed

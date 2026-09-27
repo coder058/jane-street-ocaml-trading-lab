@@ -84,6 +84,28 @@ groups with no statistical correction, live execution model or demonstrated
 predictive edge. The shapes are a subset reimplemented from Pattern Forge;
 cross-language parity is not yet proven.
 
+### Closed-candle Markov transition audit
+
+The read-only [Markov candle audit](../research/markov_candle_audit.py) builds
+states from the current bar's close direction, Pattern Forge candle shapes and
+EMA20/50 trend. It counts the next *adjacent* five-minute bar's direction using
+only previous bars for each state. Gap boundaries are excluded. The January–June
+development interval supplied **52,071** adjacent labels; the July–September
+interval supplied **25,238**. July–September was already inspected in the
+earlier shape study, so it is **reused evaluation data**, not a fresh holdout.
+
+On that reused interval, the frozen state-frequency forecast had a Brier score
+of **0.249536** versus **0.249996** for the constant development up-rate.
+The next-bar midpoint rose in **49.45%** of cases and averaged **+0.1494 basis
+points**. Only **59 of 25,238** next-bar midpoint rises exceeded **50 basis
+points**, the first-tier Alpaca taker *fee-only* hurdle for buying and selling.
+The hurdle excludes spread and execution slippage; the midpoint close is not a
+fillable exit. There were 73 observed development states, so rare combinations
+can have unstable rates. Historical bar revisions, dependence and earlier
+inspection further weaken this evidence. **No Markov state currently authorizes
+an order or selects the requested $50/$500 paper tiers.** The current OCaml
+paper execution rule is still the uncalibrated quote-cross experiment.
+
 ### One frozen daily-rule probe, not an execution claim
 
 The read-only [daily-bar downloader](../research/fetch_daily_bars.py) saved
