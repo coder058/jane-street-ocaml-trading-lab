@@ -22,6 +22,10 @@ Jane Street or Alpaca. It does not claim a profitable strategy.
 - An append-only local journal records quotes, decisions and broker responses.
 - `--research-once` reads closed BTC, ETH and SOL candles from Pattern Forge
   for descriptive 5m, 1h and 1d context. This path cannot authorize orders.
+- A separate read-only WebSocket collector on Dublin archives Alpaca US BTC/USD
+  quotes, trades and orderbook events with local receipt timestamps. It is
+  research data, not an input to the current order rule. Raw captures stay on
+  the VPS and are not published with the web monitor.
 - `web/` contains the Vercel paper monitor. Dublin exports broker snapshots
   and the journal with Ed25519 signatures; Vercel never receives Alpaca keys.
 
