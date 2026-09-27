@@ -33,6 +33,7 @@ export type PaperTelemetry = {
   generatedAt: string;
   source: "Dublin OCaml paper service";
   service: { active: boolean; mode: "MONITOR" | "PAPER_ORDER" | "STOPPED" };
+  capture?: { active: boolean; lastEventAt: string | null; bytesToday: number };
   account: { equity: string; cash: string; buyingPower: string };
   positions: PaperPosition[];
   orders: PaperOrder[];

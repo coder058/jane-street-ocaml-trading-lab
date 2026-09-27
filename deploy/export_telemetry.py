@@ -27,6 +27,7 @@ STATE_DIR = Path("/home/ubuntu/jsbot-paper-state")
 SYNC_PATH = STATE_DIR / "telemetry-sync.json"
 EVENTS_PATH = STATE_DIR / "events.jsonl"
 BACKFILL_PATH = STATE_DIR / "events-bootstrap.jsonl"
+CAPTURE_DIR = STATE_DIR / "market-capture" / "us"
 
 # SOURCE: Alpaca documents at most 500 results per Get All Orders request.
 ORDER_PAGE_SIZE = 500
@@ -124,7 +125,24 @@ def service_state(credentials: dict[str, str]) -> dict[str, object]:
     mode = "PAPER_ORDER" if active and credentials.get("PAPER_ORDERS") == "1" else (
         "MONITOR" if active else "STOPPED"
     )
-    return {"active": active, "mode": mode}
+    capture_active = subprocess.run(
+        ["systemctl", "is-active", "--quiet", "jane-market-capture.service"],
+        check=False,
+    ).returncode == 0
+    return {"active": active, "mode": mode, "captureActive": capture_active}
+
+
+def capture_state(service: dict[str, object]) -> dict[str, object]:
+    today = datetime.now(timezone.utc).date().isoformat()
+    path = CAPTURE_DIR / f"{today}.jsonl"
+    if not path.exists():
+        return {"active": service["captureActive"], "lastEventAt": None, "bytesToday": 0}
+    stat = path.stat()
+    return {
+        "active": service["captureActive"],
+        "lastEventAt": datetime.fromtimestamp(stat.st_mtime, timezone.utc).isoformat().replace("+00:00", "Z"),
+        "bytesToday": stat.st_size,
+    }
 
 
 def significant_digest(events: list[dict[str, str]], service: dict[str, object]) -> str:
@@ -148,6 +166,7 @@ def snapshot(credentials: dict[str, str], service: dict[str, object],
         "generatedAt": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         "source": "Dublin OCaml paper service",
         "service": service,
+        "capture": capture_state(service),
         "account": {
             "equity": str(account.get("equity", "")),
             "cash": str(account.get("cash", "")),
