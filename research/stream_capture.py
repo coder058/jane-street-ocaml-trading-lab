@@ -98,15 +98,16 @@ async def session(archive: Archive) -> None:
                 if kind == "success" and item.get("msg") == "authenticated":
                     authenticated = True
                     await socket.send(json.dumps({"action": "subscribe", "quotes": [SYMBOL],
-                                                  "trades": [SYMBOL], "orderbooks": [SYMBOL]}))
+                                                  "trades": [SYMBOL], "orderbooks": [SYMBOL],
+                                                  "bars": [SYMBOL], "updatedBars": [SYMBOL]}))
                 elif kind == "subscription":
                     expected = all(SYMBOL in item.get(channel, []) for channel in
-                                   ("quotes", "trades", "orderbooks"))
+                                   ("quotes", "trades", "orderbooks", "bars", "updatedBars"))
                     if not authenticated or not expected:
                         raise CaptureGuardError("Alpaca stream subscription was incomplete")
                     subscribed = True
-                    print("market capture: authenticated; BTC/USD quotes, trades and orderbooks", flush=True)
-                elif kind in ("q", "t", "o"):
+                    print("market capture: authenticated; BTC/USD quotes, trades, orderbooks and closed-minute bars", flush=True)
+                elif kind in ("q", "t", "o", "b", "u"):
                     if not subscribed or item.get("S") != SYMBOL or not isinstance(item.get("t"), str):
                         raise CaptureGuardError("unexpected stream market event")
                     archive.write(item)
