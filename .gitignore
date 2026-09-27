@@ -3,3 +3,4 @@ _build/
 .env
 .env.*
 *.opam
+__pycache__/
