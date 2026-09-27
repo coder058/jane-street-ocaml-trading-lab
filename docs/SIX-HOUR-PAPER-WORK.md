@@ -38,7 +38,7 @@ Codex follow-ups. This file is the handoff for the scheduled follow-up loop.
 - No replacement policy was deployed. The quote-cross rule has no measured
   net edge and cannot be called profitable from these observations.
 
-## 19:24 UTC follow-up (work through 19:32 UTC)
+## 19:24 UTC follow-up (work through 19:41 UTC)
 
 - Dublin's paper order service, market capture, five-minute bar timer and new
   Markov shadow timer were active; the pending-order file was absent. No order
@@ -83,8 +83,10 @@ Codex follow-ups. This file is the handoff for the scheduled follow-up loop.
   trade and did not authorize an order. At 19:39:53 the following bar was
   retrieved and labeled down, with a next-close midpoint move of −0.50480
   basis points. This is one outcome, not a performance estimate. The next
-  recorded prediction had only 6.515208 seconds of lead time, confirming
-  the REST path cannot currently support the intended five-minute horizon.
+  recorded prediction had only 6.515208 seconds of lead time. The interval
+  timer was drifting relative to the UTC five-minute closes; later samples
+  near an exact close had almost five minutes of lead. Do not attribute the
+  inconsistent lead times to unavoidable REST latency.
 - The captured live one-minute bar stream delivered 653 closed bars over 690
   elapsed slots, with 37 missing minute slots; 108 of 138 five-minute groups
   had all five minute bars. Among 106 complete groups also present in the
@@ -97,6 +99,42 @@ Codex follow-ups. This file is the handoff for the scheduled follow-up loop.
 - Twelve Python tests passed, including a boundary check that excludes the
   July label and a point-in-time shadow prediction/label check. The old
   descriptive audit metrics did not change after the state refactor.
+
+## 19:54 UTC follow-up (work through 20:01 UTC)
+
+- Dublin's paper service, capture, telemetry, bar refresh and Markov shadow
+  timers were active. The broker check reported no open orders, and there was
+  no local pending-order journal. The 19:53 signed snapshot still had 72 bot
+  orders, 92 bot fills and 0.001176752 BTC open. Recent journal samples were
+  `candidate=false` under `quote_cross_30s_v1`; no new policy was deployed.
+  The account Activities query still returned zero `CFEE` and `FEE` rows.
+- The bar refresher used `OnUnitActiveSec=5min`, so execution time drifted
+  through the five-minute boundary. The last two pre-change executions at
+  19:50:00 and 19:55:00 already produced close-to-full-horizon predictions.
+  The timer is now anchored to UTC five-minute closes at +5 seconds, with a
+  +30-second retry if the API is late. This 5/30-second choice is an
+  **uncalibrated scheduling guess**, based on the observed availability at
+  about +1 second; collect more cycles before trusting the cadence.
+- At 20:00:06 the aligned refresh retrieved the 19:55 bar, and shadow
+  prediction had 293.374145 seconds before the next close. The 20:00:30
+  retry returned the same bar; the shadow journal wrote no duplicate event.
+  The order service remained active throughout. This verifies one aligned
+  cycle, not long-run feed reliability.
+- The chronological shadow scorer checks pairing, duplicate events and
+  prediction-before-close. At 20:00 it had 6 predictions, 5 later labels and
+  1 unlabeled prediction. The 5 scored examples had lead times from 3.525722
+  to 299.494861 seconds, so they should not be pooled as equal-horizon
+  evidence. The model Brier was 0.283329 versus 0.249920 for its frozen
+  base-rate predictor on this tiny mixed sample. None had a positive
+  next-midpoint move above the 50-basis-point first-tier taker fee-only
+  round-trip hurdle. No after-cost edge follows from five examples.
+- A pre-July state-mean audit found 1 of 73 states with a mean next-bar
+  midpoint rise over that 50-basis-point fee-only hurdle. It had only 9
+  training occurrences and zero occurrences in the already-inspected
+  July–September interval. It does not support a probability size tier or
+  order policy. The Brier score measures direction, not executable return.
+- Fifteen Python tests passed, including the scorer's time-order and
+  duplicate guards. No OCaml order logic changed.
 
 ## Next verified steps
 
@@ -111,9 +149,9 @@ Codex follow-ups. This file is the handoff for the scheduled follow-up loop.
 4. Evaluate Murphy-style trend and candle shapes at a declared horizon, with
    a Markov transition model and a chronological forward test that has not
    been used for model selection. Include bid/ask and the actual fee tier.
-   For an actionable five-minute horizon, construct a timely as-received bar
-   source and measure its gaps/revisions; current REST snapshots arrive with
-   only about 14 seconds remaining until the next bar close.
+   First verify that the new aligned REST timer keeps roughly five minutes of
+   lead, then compare it with timely as-received stream bars and measure gaps
+   and revisions. Exclude old short-lead samples from any full-horizon score.
 5. Run any candidate in shadow mode first. Give it paper order authority only
    if measured evidence, broker reconciliation and safety checks support the
    change. Do not activate the user-requested $50/$500 probability tiers from
