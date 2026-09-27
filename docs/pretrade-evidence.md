@@ -32,6 +32,19 @@ calculated age of −0.663541 seconds; this is a timestamp-resolution artifact,
 not evidence of a quote from the future. This audit reinforces the decision to
 leave the diagnostic rule disarmed; it does not measure a profitable edge.
 
+The new private Alpaca US stream was audited with
+[stream_audit.py](../research/stream_audit.py) after 151 events: 42 quotes, two
+trades and 107 book messages, including one full book reset. The observed
+event-to-VPS receipt timestamp difference for quotes was **0.044005 seconds
+median** and **0.045184 seconds p90**; book updates had **0.045578 seconds
+median** and **0.126375 seconds p90**. The initial full book snapshot was
+**110.736494 seconds** older than its receipt and dominates the book maximum.
+The short sample had zero invalid quotes, zero crossed reconstructed books and
+zero updates before the reset. The VPS reports NTP synchronization, but the
+exchange/VPS clock offset was not independently calibrated, so these deltas
+must not be called one-way network latency. No fill behavior or predictive
+performance follows from this short capture.
+
 ## Inputs and their limits
 
 | Input | Available evidence | Trading limit |
