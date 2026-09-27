@@ -62,12 +62,31 @@ export function botAccounting(t: PaperTelemetry): BotAccounting {
   };
 }
 
-export function orderFillSummary(order: PaperOrder, fills: PaperFill[]): { quantity: number; notional: number } {
+export type OrderFillSummary = {
+  quantity: number;
+  notional: number;
+  averagePrice: number | null;
+  fillCount: number;
+  firstAt: string | null;
+  lastAt: string | null;
+};
+
+export function orderFillSummary(order: PaperOrder, fills: PaperFill[]): OrderFillSummary {
   const matching = fills.filter((fill) => fill.orderId === order.id);
+  const quantity = matching.reduce((sum, fill) => sum + Number(fill.qty), 0);
+  const notional = matching.reduce((sum, fill) => sum + Number(fill.qty) * Number(fill.price), 0);
+  const times = matching.map((fill) => fill.transactionTime).filter((value): value is string => !!value).sort();
   return {
-    quantity: matching.reduce((sum, fill) => sum + Number(fill.qty), 0),
-    notional: matching.reduce((sum, fill) => sum + Number(fill.qty) * Number(fill.price), 0),
+    quantity, notional, averagePrice: quantity > 0 ? notional / quantity : null,
+    fillCount: matching.length, firstAt: times[0] ?? null, lastAt: times.at(-1) ?? null,
   };
+}
+
+export function botExecutions(t: PaperTelemetry): { order: PaperOrder; fill: OrderFillSummary }[] {
+  const fills = botFills(t);
+  return botOrders(t).map((order) => ({ order, fill: orderFillSummary(order, fills) }))
+    .filter(({ fill }) => fill.fillCount > 0 && Number.isFinite(fill.notional) && fill.quantity > 0)
+    .sort((left, right) => (right.fill.lastAt ?? "").localeCompare(left.fill.lastAt ?? ""));
 }
 
 export function orderDisplayStatus(order: PaperOrder): string {
@@ -78,7 +97,9 @@ export function orderDisplayStatus(order: PaperOrder): string {
   return order.status.replaceAll("_", " ");
 }
 
-export function decisionForOrder(order: PaperOrder, journal: PaperTelemetry["journal"]): Record<string, string> | null {
+export function decisionForOrder(order: PaperOrder, journal: PaperTelemetry["journal"],
+  history?: PaperTelemetry["decisionHistory"]): Record<string, string> | null {
+  if (history?.[order.id]) return history[order.id];
   const suffix = order.clientOrderId.replace(/^jsbotbtc(?:buy|sell)/, "");
   const decision = journal.findLast((entry) => {
     if (!entry.message.startsWith("HOT_DECISION ")) return false;
@@ -88,4 +109,13 @@ export function decisionForOrder(order: PaperOrder, journal: PaperTelemetry["jou
   if (!decision) return null;
   return Object.fromEntries(decision.message.split(" ").slice(1).filter((part) => part.includes("="))
     .map((part) => part.split(/=(.*)/s).slice(0, 2)));
+}
+
+export function reasonForOrder(order: PaperOrder, decision: Record<string, string> | null): string {
+  if (!decision) return "Decision trace unavailable for this order.";
+  if (decision.policy !== "quote_cross_30s_v1")
+    return `Recorded policy: ${decision.policy ?? "unknown"}.`;
+  return order.side === "buy"
+    ? "Current bid crossed above the earlier sampled ask."
+    : "Current ask crossed below the earlier sampled bid.";
 }

@@ -143,7 +143,7 @@ def broker_fills(credentials: dict[str, str], orders: list[dict[str, object]]) -
     return projected, complete
 
 
-def journal() -> tuple[list[dict[str, str]], bool]:
+def journal() -> tuple[list[dict[str, str]], bool, list[dict[str, str]]]:
     rows: list[dict[str, str]] = []
     for path in (BACKFILL_PATH, EVENTS_PATH):
         if not path.exists():
@@ -157,7 +157,50 @@ def journal() -> tuple[list[dict[str, str]], bool]:
                 continue
     rows.sort(key=lambda item: item["at"])
     complete = len(rows) <= MAX_JOURNAL_LINES
-    return rows[-MAX_JOURNAL_LINES:], complete
+    # SOURCE: the complete local journal is needed to preserve the decision
+    # trace for older broker orders after the public journal window rolls on.
+    decision_rows = [row for row in rows if row["message"].startswith(
+        ("HOT_DECISION ", "HOT_SAMPLE "))]
+    return rows[-MAX_JOURNAL_LINES:], complete, decision_rows
+
+
+def decision_history(events: list[dict[str, str]],
+                     orders: list[dict[str, object]]) -> dict[str, dict[str, str]]:
+    """Join logged quote decisions to broker order IDs without guessing proximity."""
+    decisions: dict[str, dict[str, str]] = {}
+    samples: dict[str, dict[str, str]] = {}
+    for row in events:
+        message = row["message"]
+        if not message.startswith(("HOT_DECISION ", "HOT_SAMPLE ")):
+            continue
+        fields = dict(token.split("=", 1) for token in message.split()[1:]
+                      if "=" in token)
+        quote_time = fields.get("quote_time", "")
+        if not quote_time:
+            continue
+        suffix = "".join(character for character in quote_time if character.isalnum())
+        if message.startswith("HOT_DECISION "):
+            decisions[suffix] = {key: fields[key] for key in (
+                "quote_time", "policy", "receive_to_decision_ms", "trend",
+                "context_frame", "context_bar", "probability") if key in fields}
+        else:
+            samples[suffix] = {key: fields[key] for key in (
+                "reference_quote_time", "window_ms", "candidate") if key in fields}
+    result: dict[str, dict[str, str]] = {}
+    for order in orders:
+        client_id = order.get("clientOrderId")
+        order_id = order.get("id")
+        side = order.get("side")
+        if not isinstance(client_id, str) or not isinstance(order_id, str) or \
+                side not in ("buy", "sell"):
+            continue
+        prefix = f"jsbotbtc{side}"
+        if not client_id.startswith(prefix):
+            continue
+        suffix = client_id[len(prefix):]
+        if suffix in decisions:
+            result[order_id] = {**decisions[suffix], **samples.get(suffix, {})}
+    return result
 
 
 def service_state(credentials: dict[str, str]) -> dict[str, object]:
@@ -245,7 +288,8 @@ def significant_digest(events: list[dict[str, str]], service: dict[str, object],
 
 
 def snapshot(credentials: dict[str, str], service: dict[str, object],
-             events: list[dict[str, str]], journal_complete: bool) -> dict[str, object]:
+             events: list[dict[str, str]], journal_complete: bool,
+             decision_events: list[dict[str, str]]) -> dict[str, object]:
     account = paper_get("/v2/account", credentials)
     positions = paper_get("/v2/positions", credentials)
     orders, orders_complete = broker_orders(credentials)
@@ -280,6 +324,7 @@ def snapshot(credentials: dict[str, str], service: dict[str, object],
         "ordersComplete": orders_complete,
         "fills": fills,
         "fillsComplete": fills_complete,
+        "decisionHistory": decision_history(decision_events, orders),
         "journal": events,
         "journalComplete": journal_complete,
     }
@@ -294,9 +339,10 @@ def main() -> int:
     if not args.dry_run and not endpoint.startswith("https://"):
         print("telemetry: JANE_MONITOR_INGEST_URL must be HTTPS", file=sys.stderr)
         return 1
-    events, journal_complete = journal()
+    events, journal_complete, decision_events = journal()
     service = service_state(credentials)
-    document = snapshot(credentials, service, events, journal_complete)
+    document = snapshot(credentials, service, events, journal_complete,
+                        decision_events)
     digest = significant_digest(events, service, document)
     previous = {}
     if SYNC_PATH.exists():

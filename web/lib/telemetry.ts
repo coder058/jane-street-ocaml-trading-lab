@@ -76,6 +76,7 @@ export type PaperTelemetry = {
   ordersComplete: boolean;
   fills?: PaperFill[];
   fillsComplete?: boolean;
+  decisionHistory?: Record<string, Record<string, string>>;
   journal: JournalEvent[];
   journalComplete: boolean;
 };

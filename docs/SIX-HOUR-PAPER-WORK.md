@@ -171,6 +171,31 @@ Codex follow-ups. This file is the handoff for the scheduled follow-up loop.
 - Seven web tests, TypeScript typecheck and Next.js production build passed
   before publishing. The order policy and VPS executable were not changed.
 
+## 23:05–23:12 UTC monitor correction
+
+- The user correctly identified a presentation failure: the large four-decimal
+  negative USD figure could be read as thousands, while actual fills were
+  below several large panels and canceled orders were mixed into the default
+  list. No trading policy changed in this correction.
+- The public signed snapshot at 23:06:01 UTC had 98 broker orders, 127 fills
+  and an incomplete 4,000-row public journal. A local join of that retained
+  journal found recorded decisions for 65 of 97 bot orders; older reasons were
+  dropping from the public window even though the VPS still held the full
+  append-only journal. This is a data-presentation defect, not evidence that
+  those older orders lacked a decision.
+- The monitor code now puts the latest Alpaca paper executions first, groups
+  fills by broker order, displays execution amount, BTC quantity, average
+  price, time and the actual recorded quote-cross rule, and defaults the full
+  history to executed orders. Canceled attempts are a separate filter. The
+  indicative USD amount is rounded to cents with an explicit USD unit, and
+  net closed-trade P&L remains labeled unverified.
+- The telemetry exporter now derives a compact per-order decision history from
+  the complete owner-controlled journal, matched by the encoded quote time
+  rather than a nearby timestamp. The test covers an old decision, its prior
+  quote time and a neighboring unrelated event. Seven web tests, one exporter
+  test, TypeScript typecheck and production build passed locally. Deployment
+  and live verification remained to be done at this checkpoint.
+
 ## Next verified steps
 
 1. Recheck service, feed, broker position, open orders and pending journal.
