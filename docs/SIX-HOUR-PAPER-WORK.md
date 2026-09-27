@@ -162,6 +162,8 @@ Codex follow-ups. This file is the handoff for the scheduled follow-up loop.
   The indicator explicitly excludes AAPL, requires complete order/fill
   histories, and hides the figure if any non-bot BTC order or missing BTC mark
   prevents attribution. It does not label paper results as live profit.
+  Closed-trade net P&L is shown as unverified until broker fee activities and
+  position lots can be reconciled.
   A 22:55:54 UTC snapshot produced an indicative marked figure of
   −$3.1573682976477926 (buy fills $1162.7966702821598, sell fills
   $1059.938718984512, broker BTC mark $99.700583); this is not an executable

@@ -172,8 +172,8 @@ export default function Home() {
         </div>
       </section>
 
-      <section className="quick-stats"><div><span>ORDERS WITH A FILL</span><strong>{filledOrders.length}</strong><small>{sellOrders.length} sell orders · {fills.length} individual fill records</small></div>
-        <div><span>LATEST ORDER</span><strong>{clock(orders[0]?.submittedAt)} <em>UTC</em></strong><small>{orders[0] ? `${orders[0].side.toUpperCase()} · ${orderDisplayStatus(orders[0])}` : "No bot order"}</small></div>
+      <section className="quick-stats"><div><span>ORDERS WITH A FILL</span><strong>{filledOrders.length}</strong><small>{sellOrders.length} exit orders · {fills.length} individual fill records</small></div>
+        <div><span>CLOSED-TRADE NET P&amp;L</span><strong className="policy-name">Not verified</strong><small>Broker fee activities and position lots need reconciliation</small></div>
         <div><span>POLICY SENDING ORDERS</span><strong className="policy-name">{t.analysis?.lastDecision?.policy ?? "Unavailable"}</strong><small>Murphy / candles / Markov are read-only</small></div></section>
 
       <section className="work-grid" id="orders"><div className="orders-panel"><div className="section-title"><div><span className="eyebrow">EXECUTION DESK</span>
