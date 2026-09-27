@@ -1,0 +1,9 @@
+(test
+ (name test_alpaca_http)
+ (modules test_alpaca_http)
+ (libraries paper_market unix))
+
+(test
+ (name test_paper_crypto)
+ (modules test_paper_crypto)
+ (libraries paper_market))

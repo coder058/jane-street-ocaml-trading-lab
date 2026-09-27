@@ -1,0 +1,5 @@
+_build/
+.paper-state/
+.env
+.env.*
+*.opam

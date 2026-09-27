@@ -1,0 +1,4 @@
+(executable
+ (name paper_crypto_main)
+ (modules paper_crypto_main)
+ (libraries paper_market yojson unix))
