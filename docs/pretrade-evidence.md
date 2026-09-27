@@ -10,16 +10,17 @@ the historical 2026 holdout was already examined.
 
 From 08:36 to 10:26 UTC, the earlier REST polling service sent, received
 acknowledgements for, and reconciled **20 additional paper orders**. Its
-durable journal shows $299.999246395 in buy attempts against the user's $300
-daily cap. The broker later showed no BTC position, no open order, and the
+durable journal shows $299.999246395 in buy attempts against a then-active $300
+daily cap, removed after the user's clarification. The broker later showed no BTC position, no open order, and the
 pre-existing 10 AAPL shares. At 13:00 UTC the paper service switched to the
-Alpaca WebSocket quote feed. The live process received a quote and loaded
-closed-bar context, but a new WebSocket-triggered paper order had not yet been
-observed at this writing. Neither period demonstrates profitability.
+Alpaca WebSocket quote feed. After restoring the prior 30-second decision
+cadence, a 13:46:17 UTC candidate led to a paper buy, broker acknowledgement,
+fill and 13:46:21 UTC reconciliation. The 13:46:30 UTC signed public snapshot
+showed the order and fill. Neither period demonstrates profitability.
 
 ## What was measured today
 
-The paper broker returned a complete list of the account's orders. Five orders
+An early paper-broker snapshot returned a complete list of the account's orders at that time. Five orders
 had this bot's `jsbotbtc` client-ID prefix: three buys (one IOC canceled after
 a tiny partial fill) and two filled sells. Summing `filled_qty ×
 filled_avg_price` gives **$39.9887759676 bought** and **$39.8978419145 sold**.

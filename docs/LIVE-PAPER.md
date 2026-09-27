@@ -77,6 +77,24 @@ the earlier 30-second cadence found six descriptive crosses among 34 samples.
 The WebSocket policy was changed to that cadence at 13:40 UTC. The OCaml consumer has shown live
 quotes, closed bars and a 5m context loaded from 352 contiguous Alpaca bars.
 
+At 13:45:43 UTC the collector was restarted for a recovery check. It
+authenticated again, and the OCaml process logged a new feed session and
+reset its quote baseline at 13:45:44 UTC. A 13:46:17 UTC sampled cross led to a
+paper BTC/USD buy with client order ID
+`jsbotbtcbuy20260927T134617065211486Z`. Alpaca acknowledged it and returned
+a completed fill; OCaml reconciled the order at 13:46:21 UTC. A broker read
+showed no open orders, a BTC position of 0.000235149, and the protected 10
+AAPL shares. The signed public snapshot at 13:46:30 UTC showed 27 account
+orders and 37 fill activities, including the new buy. The filled order size
+was 0.000235739 BTC; the broker position was smaller. This runbook does not
+attribute that difference without a fee-activity reconciliation.
+
+For this single cycle, the service logged 7.409 ms from local receipt to
+decision, 1,302.796 ms from receipt to the start of the HTTP order request,
+and a 316.036 ms HTTP round trip. The timing excludes neither broker checks
+nor journal writes from the middle interval. It does not establish a latency
+distribution or an HFT execution capability.
+
 Paper fills are simulated from quotes. They do not establish live fill quality
 or profitability. The cross-spread rule may lose money after spread, fees,
 slippage, and adverse selection.

@@ -60,7 +60,14 @@ order path started at 13:00 UTC. An audit of 1,349 captured quotes from
 13:16:05–13:38:43 UTC found zero crosses among adjacent quotes and six crosses
 among 34 non-overlapping 30-second samples. This motivated restoring the
 earlier diagnostic cadence on the WebSocket at 13:40 UTC; it is not an edge
-estimate. Pattern Forge and Energy Monitor remain descriptive context in
+estimate. A collector restart at 13:45:43 UTC produced a new session and a
+fresh OCaml baseline. The next qualifying sample at 13:46:17 UTC led to an
+Alpaca paper BTC/USD buy: the broker acknowledged it, reported a fill and no
+open order, and OCaml reconciled it at 13:46:21 UTC. The public monitor showed
+the same new order and fill in its 13:46:30 UTC snapshot. In this one cycle,
+local receipt-to-decision was 7.409 ms, receipt-to-HTTP 1,302.796 ms, and the
+HTTP round trip 316.036 ms. These are distinct measurements, not a latency
+distribution or live-trading result. Pattern Forge and Energy Monitor remain descriptive context in
 their own domains. See [the live-paper runbook](docs/LIVE-PAPER.md) and
 [the evidence and strategy limits](docs/pretrade-evidence.md).
 
