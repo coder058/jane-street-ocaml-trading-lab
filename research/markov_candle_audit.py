@@ -31,14 +31,15 @@ def state(trend: str, previous: dict | None, current: dict) -> str:
     return "|".join((trend, direction, pattern))
 
 
-def observations(document: dict) -> list[tuple[str, bool, float, bool]]:
+def states_for_bars(document: dict) -> list[str | None]:
+    """Compute each closed bar's state without looking at any later bar."""
     if document.get("symbol") != "BTC/USD" or document.get("timeframe") != "5Min":
         raise ValueError("expected Alpaca US BTC/USD five-minute bars")
     bars = document["bars"]
     times = [parse_time(bar["t"]) for bar in bars]
     if times != sorted(set(times)):
         raise ValueError("bar timestamps are unsorted or duplicated")
-    result = []
+    result: list[str | None] = []
     seed: list[float] = []
     fast = slow = None
     for index, bar in enumerate(bars):
@@ -59,23 +60,35 @@ def observations(document: dict) -> list[tuple[str, bool, float, bool]]:
         elif len(seed) > SLOW_PERIOD:
             # SOURCE: Pattern Forge's EMA recurrence.
             slow += (close - slow) * (2 / (SLOW_PERIOD + 1))
-        if not index or index + 1 >= len(bars):
+        if not index or times[index] - times[index - 1] != STEP:
+            result.append(None)
             continue
-        if times[index] - times[index - 1] != STEP or times[index + 1] - times[index] != STEP:
-            continue
-        next_close = float(bars[index + 1]["c"])
-        if next_close <= 0:
-            raise ValueError("non-positive next close")
         trend = (
             "rising" if fast is not None and slow is not None and close > fast > slow
             else "falling" if fast is not None and slow is not None and close < fast < slow
             else "mixed_or_warming"
         )
+        result.append(state(trend, bars[index - 1], bar))
+    return result
+
+
+def observations(document: dict) -> list[tuple[str, bool, float, bool]]:
+    states = states_for_bars(document)
+    bars = document["bars"]
+    times = [parse_time(bar["t"]) for bar in bars]
+    result = []
+    for index, key in enumerate(states[:-1]):
+        if key is None or times[index + 1] - times[index] != STEP:
+            continue
+        close = float(bars[index]["c"])
+        next_close = float(bars[index + 1]["c"])
+        if next_close <= 0:
+            raise ValueError("non-positive next close")
         # SOURCE: percentage change in basis points; the decision is at the
         # close of the current bar and the label is the next bar's close.
         forward_bps = (next_close / close - 1) * 10_000
-        result.append((state(trend, bars[index - 1], bar), next_close > close,
-                       forward_bps, times[index] >= HOLDOUT_START))
+        result.append((key, next_close > close, forward_bps,
+                       times[index] >= HOLDOUT_START))
     return result
 
 

@@ -2,6 +2,7 @@
 Description=Refresh Alpaca BTC/USD closed 5m bar snapshot for OCaml analysis
 After=network-online.target
 Wants=network-online.target
+OnSuccess=jane-markov-shadow.service
 
 [Service]
 Type=oneshot

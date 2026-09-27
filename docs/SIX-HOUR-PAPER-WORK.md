@@ -38,6 +38,54 @@ Codex follow-ups. This file is the handoff for the scheduled follow-up loop.
 - No replacement policy was deployed. The quote-cross rule has no measured
   net edge and cannot be called profitable from these observations.
 
+## 19:24 UTC follow-up (work through 19:32 UTC)
+
+- Dublin's paper order service, market capture, five-minute bar timer and new
+  Markov shadow timer were active; the pending-order file was absent. No order
+  policy or risk limit was changed.
+- The public signed broker snapshot generated at 19:30:35 UTC contained 72 bot
+  orders, 92 bot fills and an open BTC position of 0.001176752 BTC with broker
+  market value $99.751367. Therefore the cumulative filled cash difference of
+  −$101.76139933885 is **not a realized loss**: it includes the open inventory.
+  It remains before fee activities. A fresh read-only paper Activities query
+  returned zero `CFEE` and zero `FEE` rows at 19:32 UTC. Alpaca says crypto
+  fees can post at end of day, so net paper P&L remains unverified.
+- The frozen descriptive candle/Markov model uses 52,070 adjacent labels and
+  73 states with both bars strictly before 1 July 2026. The older audit's
+  52,071 development labels included one transition into July; this frozen
+  artifact excludes it. Its historical bars were fetched in September and
+  may contain later revisions. The July–September analysis has already been
+  inspected and cannot serve as an independent holdout.
+- A read-only shadow evaluator is installed in Dublin. It writes predictions
+  only for a bar observed before the following bar closes, then logs labels
+  on later retrieval. Its initial manual execution succeeded but wrote no
+  prediction because the snapshot was stale for that horizon. At 19:29:44,
+  the latest retrieved bar started at 19:20; it left only about 16 seconds
+  until the next five-minute close. The shadow now also runs immediately after
+  each successful bar refresh and records actual lead time. Verify the
+  subsequent label before scoring a forward evaluation sample. Even valid
+  samples measure next midpoint close, not
+  executable after-cost returns.
+- At 19:34:46 the refresh automatically triggered the first real shadow
+  prediction for the 19:25 bar, with a recorded lead of **13.562538 seconds**
+  before the next bar's close. This is much too late to claim a five-minute
+  forecast horizon. The label had not arrived at this checkpoint. The
+  historical state frequency for this one observation was 0.5204565408252854
+  from 5,695 training labels; this is not a calibrated chance of a profitable
+  trade and did not authorize an order.
+- The captured live one-minute bar stream delivered 653 closed bars over 690
+  elapsed slots, with 37 missing minute slots; 108 of 138 five-minute groups
+  had all five minute bars. Among 106 complete groups also present in the
+  later REST snapshot, the median and 90th percentile absolute close-price
+  difference were both zero, and the maximum was 0.09129 basis points. The
+  stream bar reached the VPS around 60.05 seconds after its bar *start*,
+  roughly at one-minute close. These observations support investigating a
+  timely stream-based five-minute aggregator with strict gap handling. The
+  37 missing slots prohibit assuming a continuous feed.
+- Eleven Python tests passed, including a boundary check that excludes the
+  July label and a point-in-time shadow prediction/label check. The old
+  descriptive audit metrics did not change after the state refactor.
+
 ## Next verified steps
 
 1. Recheck service, feed, broker position, open orders and pending journal.
@@ -51,6 +99,9 @@ Codex follow-ups. This file is the handoff for the scheduled follow-up loop.
 4. Evaluate Murphy-style trend and candle shapes at a declared horizon, with
    a Markov transition model and a chronological forward test that has not
    been used for model selection. Include bid/ask and the actual fee tier.
+   For an actionable five-minute horizon, construct a timely as-received bar
+   source and measure its gaps/revisions; current REST snapshots arrive with
+   only about 14 seconds remaining until the next bar close.
 5. Run any candidate in shadow mode first. Give it paper order authority only
    if measured evidence, broker reconciliation and safety checks support the
    change. Do not activate the user-requested $50/$500 probability tiers from
