@@ -57,6 +57,21 @@ rows were found. Indicators must treat that interval as a gap; bars from a
 later historical download are not a point-in-time record of when revisions
 became available.
 
+A broader Alpaca US 5-minute download from 1 January through midnight 27
+September 2026 returned **77,404 bars**, with **48 gaps / 69 missing intervals**
+and no invalid OHLC rows. A frozen exploratory
+[Pattern Forge feature audit](../research/pattern_event_study.py) resets its
+EMA state at each gap and only labels adjacent bars. For the declared
+July–September holdout, the next-bar midpoint close rose after **49.45%** of
+all eligible bars (25,272 cases), **45.45%** of bullish engulfing shapes
+(1,329), **52.16%** of bearish engulfing shapes (1,321) and **53.19%** of
+shooting-star shapes (1,519). The shooting-star mean next-bar midpoint return
+was only **0.151 basis points**; the first-tier Alpaca taker fee alone is
+**25 basis points per side**. These are descriptive, overlapping feature
+groups with no statistical correction, live execution model or demonstrated
+predictive edge. The shapes are a subset reimplemented from Pattern Forge;
+cross-language parity is not yet proven.
+
 ### One frozen daily-rule probe, not an execution claim
 
 The read-only [daily-bar downloader](../research/fetch_daily_bars.py) saved
