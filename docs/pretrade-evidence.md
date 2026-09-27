@@ -155,7 +155,8 @@ own publication-time audit.
    claim about live returns.
 6. **Enforce independent risk controls.** Keep the exact paper origin, the
    user's $300-per-bot capital and $2–$30 order guidance, minimum order rules,
-   one pending order, daily attempt budget and AAPL protection. A new loss
+   one pending order, the $30 BTC position cap and AAPL protection. The user
+   clarified that repeated paper round trips have no daily turnover cap. A new loss
    limit or signal threshold needs real calibration; it must not be guessed
    silently. A breach or unknown broker state halts execution.
 

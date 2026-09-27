@@ -10,7 +10,6 @@ let state_dir =
 
 let pending_path = Filename.concat state_dir "pending"
 let owned_path = Filename.concat state_dir "owned"
-let buy_budget_path = Filename.concat state_dir "buy-budget"
 let event_path = Filename.concat state_dir "events.jsonl"
 (* GUESS: # UNCALIBRATED GUESS — reject hot quotes older than five seconds
    before paper submission; calibrate with observed queue and broker delays. *)
@@ -35,26 +34,6 @@ let write_atomic path value =
   Unix.rename temp path
 
 let remove_if_exists path = if Sys.file_exists path then Sys.remove path
-
-let utc_date () =
-  let tm = Unix.gmtime (Unix.time ()) in
-  Printf.sprintf "%04d-%02d-%02d" (tm.tm_year + 1900) (tm.tm_mon + 1)
-    tm.tm_mday
-  (* # SOURCE: Unix tm_year counts from 1900; tm_mon starts at zero. *)
-
-let buy_spent_today () =
-  match read_line buy_budget_path with
-  | None -> Ok 0.
-  | Some line ->
-    (match String.split_on_char ' ' line with
-     | [ date; value ] ->
-       (try
-          let spent = float_of_string value in
-          if not (Float.is_finite spent) || spent < 0. then
-            Error "buy budget record invalid"
-          else if date = utc_date () then Ok spent else Ok 0.
-        with _ -> Error "buy budget record malformed")
-     | _ -> Error "buy budget record malformed")
 
 let log fmt =
   Printf.ksprintf (fun s ->
@@ -162,17 +141,11 @@ let try_order ?received_ns (previous : Paper_crypto.quote)
          (match side_qty_price with
           | None -> ()
           | Some (side, qty, price) ->
-            (match buy_spent_today () with
-             | Error e -> log "HALT %s" e
-             | Ok spent ->
-               let notional = qty *. price in
-               (* # SOURCE: user-stated $300 capital per bot; buy attempts
-                  consume the daily budget even if later rejected. *)
-               if side = "buy" && spent +. notional > 300. then
-                 log "HOLD daily paper buy-attempt budget exhausted"
-               else if side = "buy" &&
+            let notional = qty *. price in
+               if side = "buy" &&
                  (position_qty *. current.ask +. notional > 30.) then
-                 (* # SOURCE: user specified $30 maximum paper position/order size. *)
+                 (* # SOURCE: user specified $30 maximum paper position/order size;
+                    cumulative turnover has no daily cap. *)
                  log "HOLD new buy would exceed user $30 BTC position cap"
                else if (match received_ns with
                  | None -> false
@@ -182,9 +155,6 @@ let try_order ?received_ns (previous : Paper_crypto.quote)
                  log "HOLD hot quote became stale before paper submission"
                else (
                  let id = client_id side current.timestamp in
-                 if side = "buy" then
-                   write_atomic buy_budget_path
-                     (utc_date () ^ " " ^ string_of_float (spent +. notional));
                  write_atomic pending_path (side ^ " " ^ id);
                  log "SEND paper %s BTC/USD qty=%.9f limit=%g id=%s" side qty price id;
                  match Paper_broker.submit_ioc ~side ~qty ~limit_price:price
@@ -197,7 +167,7 @@ let try_order ?received_ns (previous : Paper_crypto.quote)
                  | Error e -> log "UNCERTAIN submission: %s; journal retained" e
                  | Ok order ->
                    log "ACK id=%s status=%s" id
-                     (Option.value (Paper_broker.order_status order) ~default:"unknown")))))
+                     (Option.value (Paper_broker.order_status order) ~default:"unknown"))))
 
 let shadow_decision (previous : Paper_crypto.quote) (current : Paper_crypto.quote) =
   match broker_state () with

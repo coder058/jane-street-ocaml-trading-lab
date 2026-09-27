@@ -66,7 +66,9 @@ submissions and needs operator review.
 
 The older REST service sent 20 paper orders from 08:36–10:26 UTC on 27
 September; each had a broker acknowledgement and terminal reconciliation.
-Its buy attempts reached $299.999246395 of the $300 daily budget. The
+Its buy attempts reached $299.999246395 of the then-active $300 daily budget.
+That daily limit was removed after the user's clarification; the $30 BTC
+position/order cap, pending-order reconciliation, and paper-only endpoint remain. The
 WebSocket path began at 13:00 UTC; a new WebSocket-triggered order had not yet
 been observed when this runbook was updated. The OCaml consumer has shown live
 quotes, closed bars and a 5m context loaded from 352 contiguous Alpaca bars.

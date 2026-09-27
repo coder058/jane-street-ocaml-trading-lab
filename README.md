@@ -35,8 +35,9 @@ and is **not** a performance result for this bot.
 - An order journal is written before the API call. An ambiguous response
   blocks the next order until the previous client order ID is reconciled.
 - A persistent ownership marker prevents the bot from selling a BTC position
-  that predates its own buy. The user-stated $300 per-bot capital bounds daily
-  buy attempts; sell orders can still reduce exposure.
+  that predates its own buy. The BTC position and each order remain under the
+  user's $30 cap. Repeated completed round trips have no daily turnover cap;
+  the $300 per-bot capital guidance is not treated as a daily spend limit.
 - Credentials are sent to `curl` through standard input rather than argv;
   credential variables are stripped from the child process environment.
 - An append-only local journal records quotes, decisions and broker responses.
@@ -51,7 +52,7 @@ The strategy rule and $20 diagnostic size are **uncalibrated guesses**. They
 exercise an order lifecycle and do not imply an edge. Between 08:36 and 10:26
 UTC on 27 September, the earlier 30-second REST version sent 20 paper orders,
 received 20 broker acknowledgements and reconciled all 20. It used
-$299.999246395 of the $300 daily buy-attempt budget; the broker later showed
+$299.999246395 of a then-active $300 daily buy-attempt budget; the broker later showed
 zero BTC, no open order and the pre-existing 10 AAPL shares. The WebSocket
 order path started at 13:00 UTC; its first quote, five-minute context and
 service health were observed, but a new WebSocket-triggered order has not yet
@@ -74,7 +75,7 @@ partial fill of 0.000000020 BTC; the net position was 0.000000019 BTC. Later
 paper buys and sells were filled and reconciled. These are execution plumbing
 checks, not performance results. The bot handles sub-$10 dust. The account's
 existing 10-share AAPL position is outside its BTC/USD order path. The service
-continues under the paper-only and daily-budget controls.
+continues under the paper-only and per-position controls.
 
 Paper fills are simulated and can differ from live execution. Even a working
 paper order loop may lose money live after fees, spread, slippage, and adverse
