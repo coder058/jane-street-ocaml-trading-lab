@@ -195,6 +195,21 @@ Codex follow-ups. This file is the handoff for the scheduled follow-up loop.
   quote time and a neighboring unrelated event. Seven web tests, one exporter
   test, TypeScript typecheck and production build passed locally. Deployment
   and live verification remained to be done at this checkpoint.
+- Vercel deployed the execution-first UI. The exporter candidate passed a
+  read-only dry run on Dublin in `PAPER_ORDER` mode with 99 orders, 130 fills,
+  73 matched decision records and an 804,823-byte signed payload. It replaced
+  only the read-only telemetry exporter; the OCaml order executable and its
+  policy were untouched. A signed public snapshot at 23:14:22 UTC contained
+  74 compact decision records. Among its 73 executed bot orders, 52 had an
+  exact recorded decision; the other 21 were earlier executions, all at or
+  before 10:25 UTC, for which this decision trace is unavailable. The UI must
+  say so for those rows and must not invent their individual triggers.
+- The live page rendered 73 executed orders, 127 individual broker fills and
+  a flat BTC position at 23:13:40 UTC. Its visible approximate cash difference
+  was −$3.18 USD; this remains **unverified net P&L**. The latest displayed
+  exit grouped three fills into $30.09 at an average $84,176.31/BTC and showed
+  the recorded quote-cross condition. Mobile navigation and wording were
+  tightened after that screenshot and still required final deployment check.
 
 ## Next verified steps
 

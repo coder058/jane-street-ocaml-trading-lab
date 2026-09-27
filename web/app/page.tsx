@@ -210,16 +210,17 @@ export default function Home() {
           const executed = orderFillSummary(order, fills);
           const decision = decisionForOrder(order, t.journal, t.decisionHistory);
           return <button type="button" key={order.id} className={`order-row ${selected?.id === order.id ? "active" : ""}`}
-            onClick={() => setSelectedId(order.id)} aria-pressed={selected?.id === order.id}>
+            onClick={() => { setSelectedId(order.id); document.getElementById("trade-detail")?.scrollIntoView({ behavior: "smooth", block: "start" }); }}
+            aria-pressed={selected?.id === order.id}>
             <span className={`order-side ${order.side}`}>{order.side === "buy" ? "↗" : "↙"}</span>
             <span className="order-main"><strong>{order.side === "buy" ? "ENTRY · BUY" : "EXIT · SELL"} BTC</strong>
-              <small>{reasonForOrder(order, decision)}</small><small>{orderDisplayStatus(order)} · {executed.fillCount} fills</small></span>
+              <small>{reasonForOrder(order, decision)}</small><small>{orderDisplayStatus(order)} · {executed.fillCount} {executed.fillCount === 1 ? "fill" : "fills"}</small></span>
             <span className="order-amount"><strong>{money(executed.notional)}</strong><small>{quantity(executed.quantity)} BTC at {money(executed.averagePrice)}</small></span>
             <span className="order-when">{fullTime(executed.lastAt ?? order.submittedAt)}</span>
           </button>;
         })}{!visible.length && <p className="empty">No {filter === "attempts" ? "bot orders" : "executed trades"} in this filter.</p>}</div>
         {filtered.length > 10 && <button type="button" className="show-more" onClick={() => setShowAll(!showAll)}>
-          {showAll ? "Show recent orders" : `Show all ${filtered.length} orders`} <span aria-hidden="true">↗</span></button>}
+          {showAll ? "Show recent" : `Show all ${filtered.length} ${filter === "attempts" ? "orders" : "trades"}`} <span aria-hidden="true">↗</span></button>}
       </div>
       <aside className="inspector-panel" id="trade-detail"><div className="section-title compact-title"><div><span className="eyebrow">SELECTED TRADE / ORDER</span>
         <h2>What happened?</h2></div></div><OrderInspector order={selected} fills={fills} telemetry={t} /></aside></section>
