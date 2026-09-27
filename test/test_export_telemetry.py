@@ -3,15 +3,34 @@
 from __future__ import annotations
 
 import sys
+import json
+import tempfile
 import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "deploy"))
 
-from export_telemetry import decision_history  # noqa: E402
+from export_telemetry import decision_history, market_research_state  # noqa: E402
 
 
 class DecisionHistoryTests(unittest.TestCase):
+    def test_market_projection_omits_private_capture_paths(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "shadow.json"
+            frames = {name: {"completeBars": 1, "contiguousTailBars": 1,
+                             "lastBarStart": "2026-09-27T23:00:00Z", "trend": None,
+                             "candleShapes": []}
+                      for name in ("1m", "5m", "30m", "60m", "240m")}
+            path.write_text(json.dumps({"asOf": "2026-09-27T23:01:00Z",
+                                        "captureFiles": ["/private/market.jsonl"],
+                                        "orderAuthority": False,
+                                        "symbols": [{"symbol": "BTC/USD", "frames": frames}]}),
+                            encoding="utf-8")
+            projection = market_research_state(path)
+            self.assertNotIn("captureFiles", projection)
+            self.assertNotIn("/private", json.dumps(projection))
+            self.assertFalse(projection["orderAuthority"])
+
     def test_old_decision_is_joined_without_nearest_event_guess(self) -> None:
         events = [
             {"at": "2026-09-27T00:00:00Z", "message":

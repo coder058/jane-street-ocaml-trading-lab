@@ -44,6 +44,22 @@ export type JournalEvent = {
   message: string;
 };
 
+export type MarketResearch = {
+  asOf: string;
+  orderAuthority: false;
+  winProbability: null;
+  symbols: {
+    symbol: string;
+    frames: Record<string, {
+      completeBars: number;
+      contiguousTailBars: number;
+      lastBarStart: string | null;
+      trend: string | null;
+      candleShapes: string[];
+    }>;
+  }[];
+};
+
 export type PaperTelemetry = {
   version: 1;
   generatedAt: string;
@@ -70,6 +86,7 @@ export type PaperTelemetry = {
       trend: string | null;
     } | null;
   };
+  marketResearch?: MarketResearch | null;
   account: { equity: string; cash: string; buyingPower: string };
   positions: PaperPosition[];
   orders: PaperOrder[];

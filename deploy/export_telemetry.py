@@ -28,6 +28,7 @@ SYNC_PATH = STATE_DIR / "telemetry-sync.json"
 EVENTS_PATH = STATE_DIR / "events.jsonl"
 BACKFILL_PATH = STATE_DIR / "events-bootstrap.jsonl"
 CAPTURE_DIR = STATE_DIR / "market-capture" / "us"
+SHADOW_PATH = STATE_DIR / "multi-timeframe-shadow.json"
 
 # SOURCE: Alpaca documents at most 500 results per Get All Orders request.
 ORDER_PAGE_SIZE = 500
@@ -287,6 +288,31 @@ def significant_digest(events: list[dict[str, str]], service: dict[str, object],
     return hashlib.sha256(payload.encode()).hexdigest()
 
 
+def market_research_state(path: Path = SHADOW_PATH) -> dict | None:
+    """Publish a small, market-only projection of the private shadow snapshot."""
+    if not path.exists():
+        return None
+    document = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(document, dict) or document.get("orderAuthority") is not False:
+        raise ValueError("invalid read-only market shadow")
+    if not isinstance(document.get("asOf"), str) or not isinstance(document.get("symbols"), list):
+        raise ValueError("market shadow lacks timestamp or symbols")
+    rows = []
+    for item in document["symbols"]:
+        if not isinstance(item, dict) or not isinstance(item.get("symbol"), str) or not isinstance(item.get("frames"), dict):
+            raise ValueError("market shadow row is invalid")
+        frames = {}
+        for name in ("1m", "5m", "30m", "60m", "240m"):
+            frame = item["frames"].get(name)
+            if not isinstance(frame, dict):
+                raise ValueError("market shadow frame is missing")
+            frames[name] = {key: frame.get(key) for key in
+                            ("completeBars", "contiguousTailBars", "lastBarStart", "trend", "candleShapes")}
+        rows.append({"symbol": item["symbol"], "frames": frames})
+    return {"asOf": document["asOf"], "symbols": rows,
+            "orderAuthority": False, "winProbability": None}
+
+
 def snapshot(credentials: dict[str, str], service: dict[str, object],
              events: list[dict[str, str]], journal_complete: bool,
              decision_events: list[dict[str, str]]) -> dict[str, object]:
@@ -303,6 +329,7 @@ def snapshot(credentials: dict[str, str], service: dict[str, object],
         "service": service,
         "capture": capture_state(service),
         "analysis": analysis_state(events),
+        "marketResearch": market_research_state(),
         "account": {
             "equity": str(account.get("equity", "")),
             "cash": str(account.get("cash", "")),

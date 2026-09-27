@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { botAccounting, botExecutions, botFills, botOrders, decisionForOrder, orderDisplayStatus,
   orderFillSummary, reasonForOrder } from "@/lib/bot-view";
-import type { PaperFill, PaperOrder, PaperTelemetry } from "@/lib/telemetry";
+import type { MarketResearch, PaperFill, PaperOrder, PaperTelemetry } from "@/lib/telemetry";
 
 type Live = { generatedAt: string; telemetry: PaperTelemetry | null };
 type SideFilter = "trades" | "buy" | "sell" | "attempts";
@@ -30,6 +30,29 @@ const fullTime = (value: string | null | undefined) => value && !Number.isNaN(Da
   new Intl.DateTimeFormat("en-GB", { dateStyle: "medium", timeStyle: "medium", timeZone: "UTC" })
     .format(new Date(value)) + " UTC" : "—";
 const tone = (value: number | null) => value == null ? "" : value > 0 ? "positive" : value < 0 ? "negative" : "";
+
+// SOURCE: the user's requested 1m, 5m, 30m, 1h and 4h analyses.
+const researchFrames = [
+  ["1m", "1m"], ["5m", "5m"], ["30m", "30m"], ["60m", "1h"], ["240m", "4h"],
+] as const;
+
+function MarketCoverage({ research }: { research: MarketResearch | null | undefined }) {
+  if (!research) return <p>Multi-market candle coverage is not in this signed snapshot yet.</p>;
+  const minuteReady = research.symbols.filter((row) => row.frames["1m"]?.completeBars > 0).length;
+  return <details className="market-coverage">
+    <summary><strong>{research.symbols.length} crypto pairs watched</strong><span>{minuteReady} with a received closed 1m bar · view five timeframes</span></summary>
+    <p>Read-only candle research as of {fullTime(research.asOf)}. Counts are complete received bars, not trade signals. A blank trend means too few consecutive candles. No calibrated win probability or stop.</p>
+    <div className="coverage-scroll"><table><caption>As-received crypto candle coverage by symbol and timeframe</caption>
+      <thead><tr><th scope="col">Pair</th>{researchFrames.map(([key, label]) => <th scope="col" key={key}>{label}</th>)}</tr></thead>
+      <tbody>{research.symbols.map((row) => <tr key={row.symbol}><th scope="row">{row.symbol}{row.symbol === "BTC/USD" && <small>Orders use a separate quote rule</small>}</th>
+        {researchFrames.map(([key]) => {
+          const frame = row.frames[key];
+          return <td key={key} title={frame?.candleShapes?.join(", ") || "No named candle shape"}>
+            <b>{frame?.completeBars ?? 0}</b><small>{frame?.trend ?? "trend unavailable"}</small>
+          </td>;
+        })}</tr>)}</tbody></table></div>
+  </details>;
+}
 
 function Activity({ fills, snapshotAt }: { fills: PaperFill[]; snapshotAt: string }) {
   // SOURCE: UTC hours are calendar buckets; count one order once per hour
@@ -246,6 +269,7 @@ export default function Home() {
           <div className="research-rows"><div><span>Markov / candle model</span><strong>Shadow only</strong></div>
             <div><span>Probability size tiers</span><strong>Not calibrated</strong></div>
             <div><span>Execution venue</span><strong>Alpaca paper</strong></div></div>
+          <MarketCoverage research={t.marketResearch} />
           <a href="https://github.com/coder058/jane-street-ocaml-trading-lab/blob/main/docs/POLICY-ATTEMPTS.md" target="_blank" rel="noreferrer">Read the policy evidence ↗</a></div></section>
 
       <footer><span>Independent project · simulated Alpaca execution · AAPL is protected and excluded from bot accounting.</span>

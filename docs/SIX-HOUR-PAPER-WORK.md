@@ -251,6 +251,14 @@ Codex follow-ups. This file is the handoff for the scheduled follow-up loop.
   23:37:05 UTC completed successfully in 0.939 seconds, and the next trigger
   was scheduled for 23:38 UTC. This research process has no broker imports,
   credentials, network calls or order authority.
+- The telemetry exporter was extended to publish only the shadow's timestamp,
+  symbol names, per-frame coverage and descriptive labels, omitting private
+  capture file paths. A read-only VPS dry run at 23:40 UTC contained 102 broker
+  orders, 132 fills and 76 matched decision traces; its signed body was
+  817,768 bytes, below the existing 1 MiB ingest bound. The candidate replaced
+  the exporter with a backup retained. A manual telemetry service run succeeded
+  but skipped upload because the prior digest was unchanged and its heartbeat
+  was not yet due. Public monitor visibility remains to be verified.
 
 ## Next verified steps
 
