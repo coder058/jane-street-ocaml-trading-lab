@@ -201,19 +201,38 @@ let run ~trade ~once =
   in
   loop None
 
+let research_once () =
+  List.iter (fun symbol ->
+    match Pattern_forge.fetch symbol with
+    | Error e -> Printf.printf "PATTERN_FORGE_ERROR symbol=%s reason=%s\n" symbol e
+    | Ok frames ->
+      List.iter (fun (timeframe, result) ->
+        match result with
+        | Error e ->
+          Printf.printf "PATTERN_FORGE_UNAVAILABLE symbol=%s frame=%s reason=%s\n"
+            symbol timeframe e
+        | Ok (reading : Pattern_forge.reading) ->
+          Printf.printf "PATTERN_FORGE symbol=%s venue=Hyperliquid frame=%s close_time_ms=%d close=%g prior_close=%g return_pct=%+.5f read_only=true\n"
+            reading.symbol reading.timeframe reading.close_time_ms
+            reading.close reading.prior_close reading.return_pct) frames)
+    [ "BTC"; "ETH"; "SOL" ]
+
 let () =
   let trade = ref false and once = ref false and check_broker = ref false in
   let check_positions = ref false in
+  let research = ref false in
   let check_order = ref None in
   Arg.parse [
     "--paper", Arg.Set trade, "Allow paper orders only with PAPER_ORDERS=1";
     "--once", Arg.Set once, "Fetch one live quote and exit";
     "--check-broker", Arg.Set check_broker, "Read paper account, orders, position and asset";
     "--check-positions", Arg.Set check_positions, "Read paper positions without trading";
+    "--research-once", Arg.Set research, "Read Pattern Forge closed-candle context without trading";
     "--check-order", Arg.String (fun id -> check_order := Some id),
       "Read one paper order by client ID and exit";
-  ] (fun _ -> ()) "paper_crypto_main [--paper] [--once|--check-broker|--check-positions|--check-order ID]";
-  if !check_order <> None then
+  ] (fun _ -> ()) "paper_crypto_main [--paper] [--once|--research-once|--check-broker|--check-positions|--check-order ID]";
+  if !research then research_once ()
+  else if !check_order <> None then
     match !check_order with
     | None -> assert false
     | Some id ->

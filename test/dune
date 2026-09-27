@@ -7,3 +7,8 @@
  (name test_paper_crypto)
  (modules test_paper_crypto)
  (libraries paper_market))
+
+(test
+ (name test_pattern_forge)
+ (modules test_pattern_forge)
+ (libraries paper_market))
