@@ -208,8 +208,11 @@ Codex follow-ups. This file is the handoff for the scheduled follow-up loop.
   a flat BTC position at 23:13:40 UTC. Its visible approximate cash difference
   was −$3.18 USD; this remains **unverified net P&L**. The latest displayed
   exit grouped three fills into $30.09 at an average $84,176.31/BTC and showed
-  the recorded quote-cross condition. Mobile navigation and wording were
-  tightened after that screenshot and still required final deployment check.
+  the recorded quote-cross condition. A concise explanation of the actual
+  OCaml decision sequence was added from the implementation, without claiming
+  that the rule predicts after-cost profits. Mobile navigation and wording
+  were tightened after that screenshot and still required final deployment
+  check.
 
 ## Next verified steps
 

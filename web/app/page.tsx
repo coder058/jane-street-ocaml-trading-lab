@@ -169,6 +169,16 @@ export default function Home() {
           {!executions.length && <p className="empty">No BTC executions appear in this broker snapshot.</p>}
         </div>
       </section>
+      {/* SOURCE: lib/paper_crypto.ml and bin/paper_crypto_main.ml define the
+          30-second quote comparison, user-requested $100 baseline and $500 cap. */}
+      <section className="rule-explainer" aria-label="Current order decision process">
+        <div className="rule-title"><span className="eyebrow">ACTIVE OCAML RULE · quote_cross_30s_v1</span>
+          <h2>What made the agent trade?</h2><p>A quote-cross heuristic. It has no measured after-cost edge yet.</p></div>
+        <ol><li><b>Sample</b><span>Compare BTC bid and ask quotes received at least 30 seconds apart.</span></li>
+          <li><b>Decide</b><span>Flat: buy if the current bid exceeds the earlier ask. Holding bot-owned BTC: sell if the current ask falls below the earlier bid.</span></li>
+          <li><b>Check &amp; send</b><span>Reconcile pending orders, broker position and quote age; apply the $100 paper baseline and $500 BTC cap; send an Alpaca paper limit order.</span></li></ol>
+        <small>Each trade above shows the condition logged for that order. Candlesticks and Markov scores are research only; they do not place orders.</small>
+      </section>
       <section className="hero-grid" aria-label="Paper account overview">
         <div className="result-panel"><div className="result-top"><span className="eyebrow">INDICATIVE BOT CASH + MARK / BTC ONLY</span>
           <span className="result-badge">{accounting?.flat ? "FLAT" : "OPEN INVENTORY"}</span></div>
