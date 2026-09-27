@@ -7,7 +7,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "research"))
 
-from multi_timeframe_bars import aggregate, closed_minutes  # noqa: E402
+from multi_timeframe_bars import aggregate, closed_minutes, closed_minutes_many  # noqa: E402
+from multi_timeframe_shadow import describe  # noqa: E402
 
 
 class MultiTimeframeBarsTest(unittest.TestCase):
@@ -32,9 +33,17 @@ class MultiTimeframeBarsTest(unittest.TestCase):
             self.assertEqual(len(early), 4)
             self.assertEqual(early[min(early)]["c"], 100)
             self.assertEqual(aggregate(early, 5), [])
+            self.assertEqual(describe(aggregate(early, 5), 5,
+                                      datetime(2026, 9, 27, 23, 5,
+                                               tzinfo=timezone.utc))["trend"], None)
             later = closed_minutes(capture, "ETH/USD", datetime(2026, 9, 27, 23, 7,
                                                                  tzinfo=timezone.utc))
             self.assertEqual(later[min(later)]["c"], 102)
+            both = closed_minutes_many([capture], ("BTC/USD", "ETH/USD"),
+                                       datetime(2026, 9, 27, 23, 7,
+                                                tzinfo=timezone.utc))
+            self.assertEqual(both["BTC/USD"], {})
+            self.assertEqual(len(both["ETH/USD"]), 4)
 
 
 if __name__ == "__main__":

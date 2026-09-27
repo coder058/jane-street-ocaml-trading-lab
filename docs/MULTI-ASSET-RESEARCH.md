@@ -21,6 +21,16 @@ cash Dow index, an oil futures contract or a live European energy feed. Energy
 Monitor's daily/public energy tables cannot justify intraday entry orders.
 Equity sessions and feeds must be treated separately from 24/7 crypto.
 
+A separate read-only systemd timer now runs once per UTC minute on Dublin.
+`research/multi_timeframe_shadow.py` reads only the archived crypto events and
+writes a private snapshot with per-symbol/per-frame closed-bar coverage,
+consecutive-bar count, Pattern Forge candle shapes and EMA20/EMA50 trend when
+enough contiguous bars exist. The manual run at 23:36 UTC processed 15 symbols
+in 0.850 seconds. BTC had a 1m rising EMA trend but no 5m trend because the
+latest contiguous 5m tail had only 20 bars; ETH and SOL lacked any complete
+captured 5m group. These are descriptive readings with no order authority or
+calibrated probability. The one-run time is not a sustained performance test.
+
 ## Timeframes and evidence
 
 `research/multi_timeframe_bars.py` builds UTC 1m, 5m, 30m, 1h and 4h candles

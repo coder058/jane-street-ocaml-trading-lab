@@ -23,6 +23,10 @@ and is **not** a performance result for this bot.
   pairs cannot trigger orders. The [multi-asset research boundary](docs/MULTI-ASSET-RESEARCH.md)
   records the measured market catalog and five requested timeframes. Session IDs and
   a per-consumer sequence expose reconnects and lost datagrams.
+- A separate read-only timer derives closed 1m/5m/30m/1h/4h candle coverage,
+  selected Pattern Forge shapes and EMA trends once per minute for the research
+  watchlist. It has no broker credentials or order path; gaps prevent a frame
+  from being manufactured or a trend from being calculated prematurely.
 - The OCaml service is running in `PAPER_ORDER` mode with `PAPER_ORDERS=1` on
   Dublin as of 27 September 2026. It receives each quote and evaluates the
   cross-spread rule against a reference quote sampled at the earlier REST

@@ -243,6 +243,14 @@ Codex follow-ups. This file is the handoff for the scheduled follow-up loop.
   retaining BTC-only hot fanout and order authority. Ten symbols had actual
   events in the first 30 seconds; sustained throughput and all-symbol bar
   coverage remain unmeasured.
+- At 23:36 UTC, a manual read-only shadow run processed the 15-symbol capture
+  in 0.850 seconds and wrote private 1m/5m/30m/1h/4h bar coverage plus candle
+  shapes and EMA trends. BTC's latest contiguous 5m tail contained only 20
+  complete groups, so its 5m EMA trend stayed unavailable. The new systemd
+  timer is enabled for one run per UTC minute. Its first scheduled run at
+  23:37:05 UTC completed successfully in 0.939 seconds, and the next trigger
+  was scheduled for 23:38 UTC. This research process has no broker imports,
+  credentials, network calls or order authority.
 
 ## Next verified steps
 

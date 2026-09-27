@@ -24,39 +24,48 @@ def instant(value: str) -> datetime:
     return parsed.astimezone(timezone.utc)
 
 
-def closed_minutes(capture: Path, symbol: str, as_of: datetime) -> dict[int, dict]:
+def closed_minutes_many(captures: list[Path], symbols: tuple[str, ...],
+                        as_of: datetime) -> dict[str, dict[int, dict]]:
     if as_of.tzinfo is None:
         raise ValueError("as-of timestamp has no timezone")
     as_of = as_of.astimezone(timezone.utc)
-    bars: dict[int, dict] = {}
-    with capture.open(encoding="utf-8") as source:
-        for line in source:
-            record = json.loads(line)
-            event = record["event"]
-            if event.get("S") != symbol or event.get("T") not in ("b", "u"):
-                continue
-            received_at = datetime.fromtimestamp(record["receivedAtNs"] / 1_000_000_000,
-                                                 timezone.utc)
-            if received_at > as_of:
-                continue
-            started_at = instant(event["t"])
-            if started_at.second or started_at.microsecond:
-                raise ValueError("minute bar is not UTC aligned")
-            if started_at + timedelta(minutes=1) > as_of:
-                continue
-            opening, high, low, closing, volume = (
-                float(event[key]) for key in ("o", "h", "l", "c", "v")
-            )
-            if (not all(math.isfinite(value) for value in
-                        (opening, high, low, closing, volume))
-                    or not (0 < low <= min(opening, closing)
-                            <= max(opening, closing) <= high and volume >= 0)):
-                raise ValueError(f"invalid {symbol} minute bar")
-            # SOURCE: stream 'u' is Alpaca's later revision of a minute bar;
-            # overwrite only after its recorded receipt time, never retroactively.
-            slot = int(started_at.timestamp()) // 60
-            bars[slot] = event
+    bars: dict[str, dict[int, dict]] = {symbol: {} for symbol in symbols}
+    for capture in captures:
+        if not capture.exists():
+            continue
+        with capture.open(encoding="utf-8") as source:
+            for line in source:
+                record = json.loads(line)
+                event = record["event"]
+                symbol = event.get("S")
+                if symbol not in bars or event.get("T") not in ("b", "u"):
+                    continue
+                received_at = datetime.fromtimestamp(record["receivedAtNs"] / 1_000_000_000,
+                                                     timezone.utc)
+                if received_at > as_of:
+                    continue
+                started_at = instant(event["t"])
+                if started_at.second or started_at.microsecond:
+                    raise ValueError("minute bar is not UTC aligned")
+                if started_at + timedelta(minutes=1) > as_of:
+                    continue
+                opening, high, low, closing, volume = (
+                    float(event[key]) for key in ("o", "h", "l", "c", "v")
+                )
+                if (not all(math.isfinite(value) for value in
+                            (opening, high, low, closing, volume))
+                        or not (0 < low <= min(opening, closing)
+                                <= max(opening, closing) <= high and volume >= 0)):
+                    raise ValueError(f"invalid {symbol} minute bar")
+                # SOURCE: stream 'u' is Alpaca's later revision of a minute bar;
+                # overwrite only after its recorded receipt time, never retroactively.
+                slot = int(started_at.timestamp()) // 60
+                bars[symbol][slot] = event
     return bars
+
+
+def closed_minutes(capture: Path, symbol: str, as_of: datetime) -> dict[int, dict]:
+    return closed_minutes_many([capture], (symbol,), as_of)[symbol]
 
 
 def aggregate(bars: dict[int, dict], frame_minutes: int) -> list[dict]:
