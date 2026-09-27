@@ -20,6 +20,18 @@ posted at the end of the day, so the account activity ledger must be reconciled
 before reporting a final net P&L. The calculation script is retained outside
 the published repository in the task workspace.
 
+A reproducible [quote-quality audit](../research/quote_audit.py) of the signed
+07:19 UTC snapshot parsed **685 quote log rows**, but only **421 distinct quote
+timestamps**; **264 rows** repeated an earlier market quote. Approximate quote
+age at logging had a **21.226989-second median**, **88.452922-second p90** and
+**278.630044-second maximum**. The logged spread had a **2.6128-basis-point
+median** and **3.7743-basis-point p90**. These figures are computed from one
+short session, and repeated log rows are not independent market observations.
+Journal timestamps are rounded to whole seconds, which produced a minimum
+calculated age of −0.663541 seconds; this is a timestamp-resolution artifact,
+not evidence of a quote from the future. This audit reinforces the decision to
+leave the diagnostic rule disarmed; it does not measure a profitable edge.
+
 ## Inputs and their limits
 
 | Input | Available evidence | Trading limit |
