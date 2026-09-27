@@ -1,6 +1,7 @@
-"""Save point-in-time historical Alpaca US BTC/USD daily bars privately on Dublin.
+"""Save historical Alpaca US BTC/USD bars privately on Dublin.
 
-This read-only download does not submit orders or claim a predictive edge.
+Historical bars may include quote midpoints or late revisions. This read-only
+download is not a point-in-time decision archive and cannot claim an edge.
 """
 
 from __future__ import annotations
@@ -10,7 +11,7 @@ import json
 import os
 import urllib.parse
 import urllib.request
-from datetime import date
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 # SOURCE: https://docs.alpaca.markets/us/reference/cryptobars-1
@@ -30,12 +31,12 @@ def credentials() -> dict[str, str]:
     return values
 
 
-def fetch(start: str, end: str) -> list[dict]:
+def fetch(start: str, end: str, timeframe: str = "1Day") -> list[dict]:
     auth = credentials()
     result: list[dict] = []
     token = None
     while True:
-        query = {"symbols": SYMBOL, "timeframe": "1Day", "start": start,
+        query = {"symbols": SYMBOL, "timeframe": timeframe, "start": start,
                  "end": end, "limit": str(PAGE_SIZE), "sort": "asc"}
         if token:
             query["page_token"] = token
@@ -59,7 +60,7 @@ def fetch(start: str, end: str) -> list[dict]:
         token = next_token
     timestamps = [row.get("t") for row in result]
     if any(not isinstance(value, str) for value in timestamps) or timestamps != sorted(set(timestamps)):
-        raise ValueError("Alpaca daily bars have invalid, duplicate or unsorted timestamps")
+        raise ValueError("Alpaca bars have invalid, duplicate or unsorted timestamps")
     return result
 
 
@@ -67,15 +68,18 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("start", type=date.fromisoformat)
     parser.add_argument("end", type=date.fromisoformat)
+    # SOURCE: Alpaca historical crypto bars supports minute, hour and day frames.
+    parser.add_argument("--timeframe", choices=("1Min", "5Min", "1Hour", "1Day"), default="1Day")
     args = parser.parse_args()
     if args.start >= args.end:
         parser.error("start must precede end")
-    rows = fetch(args.start.isoformat(), args.end.isoformat())
+    rows = fetch(args.start.isoformat(), args.end.isoformat(), args.timeframe)
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True, mode=0o700)
-    path = OUTPUT_DIR / f"alpaca-us-btc-daily-{args.start}-{args.end}.json"
+    path = OUTPUT_DIR / f"alpaca-us-btc-{args.timeframe}-{args.start}-{args.end}.json"
     temporary = path.with_suffix(".tmp")
     with temporary.open("w", encoding="utf-8") as output:
-        json.dump({"source": API, "symbol": SYMBOL, "timeframe": "1Day",
+        json.dump({"source": API, "symbol": SYMBOL, "timeframe": args.timeframe,
+                   "retrievedAt": datetime.now(timezone.utc).isoformat(),
                    "start": args.start.isoformat(), "end": args.end.isoformat(),
                    "bars": rows}, output, separators=(",", ":"))
         output.flush()
