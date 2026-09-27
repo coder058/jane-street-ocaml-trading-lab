@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { MarketFrame, MarketSignal, MarketSymbol, Timeframe } from "@/lib/market";
-import type { JournalEvent, PaperOrder, PaperTelemetry } from "@/lib/telemetry";
+import type { JournalEvent, PaperFill, PaperOrder, PaperTelemetry } from "@/lib/telemetry";
 
 type Live = { generatedAt: string; market: MarketSymbol[]; telemetry: PaperTelemetry | null };
 
@@ -94,6 +94,17 @@ function OrderTable({ orders }: { orders: PaperOrder[] }) {
     </tr>)}</tbody></table></div>;
 }
 
+function FillTable({ fills }: { fills: PaperFill[] }) {
+  if (!fills.length) return <div className="empty-state">No Alpaca FILL activities received yet. Orders and executions are separate broker records.</div>;
+  return <><div className="fill-explain">Alpaca FILL activities are actual paper executions. One order can produce multiple fills; the historical AAPL fills predate this bot.</div>
+    <div className="table-scroll"><table><thead><tr><th>TIME / UTC</th><th>ASSET</th><th>SIDE</th><th>EXECUTION</th><th>QUANTITY</th><th>PRICE</th></tr></thead><tbody>
+      {fills.map((fill) => <tr key={fill.id}>
+        <td>{time(fill.transactionTime)}</td><td className="cell-strong">{fill.symbol}</td>
+        <td><span className={`side ${fill.side === "buy" ? "buy" : "sell"}`}>{fill.side.toUpperCase()}</span></td>
+        <td>{fill.type.replaceAll("_", " ")}</td><td className="mono">{number(fill.qty, 9)}</td><td className="mono">{money(fill.price)}</td>
+      </tr>)}</tbody></table></div></>;
+}
+
 function Journal({ events }: { events: JournalEvent[] }) {
   const [filter, setFilter] = useState<"decisions" | "all" | "quotes">("decisions");
   const [page, setPage] = useState(0);
@@ -120,7 +131,7 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState("BTC");
   const [frame, setFrame] = useState<Timeframe>("5m");
-  const [tab, setTab] = useState<"orders" | "journal">("orders");
+  const [tab, setTab] = useState<"fills" | "orders" | "journal">("fills");
   useEffect(() => {
     let active = true;
     const load = async () => {
@@ -142,6 +153,10 @@ export default function Home() {
   const telemetry = data?.telemetry ?? null;
   const recentOrders = useMemo(() => [...(telemetry?.orders ?? [])].sort((a, b) =>
     (b.submittedAt ?? "").localeCompare(a.submittedAt ?? "")), [telemetry]);
+  const recentFills = useMemo(() => [...(telemetry?.fills ?? [])].sort((a, b) =>
+    (b.transactionTime ?? "").localeCompare(a.transactionTime ?? "")), [telemetry]);
+  const botFills = recentFills.filter((fill) => fill.clientOrderId.startsWith("jsbotbtc"));
+  const botOrdersWithFills = new Set(botFills.map((fill) => fill.orderId)).size;
   const events = useMemo(() => [...(telemetry?.journal ?? [])].sort((a, b) => b.at.localeCompare(a.at)), [telemetry]);
   // GUESS: # UNCALIBRATED GUESS — same idle heartbeat allowance as the header.
   const serviceCurrent = telemetry && Date.now() - Date.parse(telemetry.generatedAt) < 20 * 60_000;
@@ -149,11 +164,11 @@ export default function Home() {
     <header className="topbar"><div className="brand"><span className="brand-mark">J<span>·</span>S</span><div><strong>OCaml Trading Lab</strong><small>INDEPENDENT PAPER RESEARCH</small></div></div><nav><a href="#market">Market</a><a href="#execution">Execution</a><a href="#research">Research</a><a href="https://github.com/coder058/jane-street-ocaml-trading-lab" target="_blank" rel="noreferrer">Source ↗</a></nav><div className="top-status"><span className="paper-chip">PAPER ONLY</span><StatusBadge telemetry={telemetry} /></div></header>
     <div className="content"><div className="hero"><div><p className="eyebrow">LIVE SYSTEM VIEW / DUBLIN, IRELAND</p><h1>Every decision, <em>visible.</em></h1><p className="hero-copy">An auditable paper trading experiment: broker executions, closed-candle context, and the agent’s actual event journal. Market readings are descriptions, not a promise of profitable trades.</p></div><div className="hero-meta"><span className="pulse-line" /><span>Last monitor response<br/><strong>{time(data?.generatedAt)}</strong></span></div></div>
     {error && <div className="alert">Monitor API: {error}. Existing data remains visible with its last timestamp.</div>}
-    <div className="metric-grid"><div className="metric-card"><span>ACCOUNT EQUITY <i>↗</i></span><strong>{telemetry ? money(telemetry.account.equity) : "—"}</strong><small>Includes pre-existing AAPL · not bot P&amp;L</small></div><div className="metric-card"><span>BOT MODE <i>◉</i></span><strong className="mode-value">{serviceCurrent ? telemetry?.service.mode.replace("_", " ") : "NO FRESH DATA"}</strong><small>{telemetry ? `Snapshot ${time(telemetry.generatedAt)}` : "Signed VPS telemetry pending"}</small></div><div className="metric-card"><span>ACCOUNT ORDERS <i>↗</i></span><strong>{telemetry ? number(telemetry.orders.length, 0) : "—"}</strong><small>{telemetry?.ordersComplete ? "Complete API result" : "Completeness not verified"}</small></div><div className="metric-card"><span>OPEN POSITIONS <i>◫</i></span><strong>{telemetry ? number(telemetry.positions.length, 0) : "—"}</strong><small>AAPL is protected from this bot</small></div></div>
+    <div className="metric-grid"><div className="metric-card"><span>ACCOUNT EQUITY <i>↗</i></span><strong>{telemetry ? money(telemetry.account.equity) : "—"}</strong><small>Includes pre-existing AAPL · not bot P&amp;L</small></div><div className="metric-card"><span>BOT MODE <i>◉</i></span><strong className="mode-value">{serviceCurrent ? telemetry?.service.mode.replace("_", " ") : "NO FRESH DATA"}</strong><small>{telemetry ? `Snapshot ${time(telemetry.generatedAt)}` : "Signed VPS telemetry pending"}</small></div><div className="metric-card"><span>BOT EXECUTION FILLS <i>↗</i></span><strong>{telemetry?.fills ? number(botFills.length, 0) : "—"}</strong><small>{telemetry?.fills ? `${botOrdersWithFills} BTC orders · Alpaca FILL activities` : "Signed broker history pending"}</small></div><div className="metric-card"><span>OPEN POSITIONS <i>◫</i></span><strong>{telemetry ? number(telemetry.positions.length, 0) : "—"}</strong><small>AAPL is protected from this bot</small></div></div>
     <div className="main-grid" id="market"><MarketPanel market={data?.market ?? []} selected={selected} onSelect={setSelected} frame={frame} onFrame={setFrame} />
       <aside className="sidebar"><section className="panel side-panel"><div className="panel-head"><div><p className="eyebrow">02 / SAFETY STATE</p><h2>Execution boundary</h2></div><span className="lock-symbol">⌁</span></div><div className="guardrail"><span className="guardrail-icon">✓</span><div><strong>Paper endpoint only</strong><small>Orders cannot target the live Alpaca host.</small></div></div><div className="guardrail"><span className="guardrail-icon">✓</span><div><strong>AAPL protected</strong><small>10 pre-existing shares remain outside BTC order code.</small></div></div><div className="guardrail"><span className="guardrail-icon">✓</span><div><strong>Pre-trade validation pending</strong><small>The diagnostic rule is disarmed while edge and costs are tested.</small></div></div><div className="guardrail"><span className="guardrail-icon">⌁</span><div><strong>Alpaca US data capture {serviceCurrent && telemetry?.capture?.active ? "running" : "unverified"}</strong><small>{telemetry?.capture?.lastEventAt ? `Latest private market event: ${time(telemetry.capture.lastEventAt)}` : "Raw quotes, trades and books stay on Dublin."}</small></div></div><div className="boundary-foot">Current account mode comes from the signed Dublin snapshot. The webpage has no order button.<br/><a className="text-link" href="https://github.com/coder058/jane-street-ocaml-trading-lab/blob/main/docs/pretrade-evidence.md" target="_blank" rel="noreferrer">Read the pre-trade evidence ↗</a></div></section>
       <section className="panel side-panel" id="research"><div className="panel-head"><div><p className="eyebrow">03 / CROSS-ASSET CONTEXT</p><h2>Energy watchlist</h2></div></div><div className="watch-row"><span>WTI / Brent</span><strong>EIA daily benchmark</strong><small>Historical candidate · no trade signal</small></div><div className="watch-row"><span>EU power / gas</span><strong>Energy Monitor</strong><small>Different market & units · no Alpaca mapping</small></div><a className="text-link" href="https://energy-monitor-jordi.jlpmccs.chatgpt.site/" target="_blank" rel="noreferrer">Open Energy Monitor ↗</a></section></aside></div>
-    <section className="panel execution-panel" id="execution"><div className="panel-head"><div><p className="eyebrow">04 / EXECUTION & EVIDENCE</p><h2>Paper activity</h2></div><div className="section-tabs"><button className={tab === "orders" ? "active" : ""} onClick={() => setTab("orders")}>Broker orders</button><button className={tab === "journal" ? "active" : ""} onClick={() => setTab("journal")}>Agent journal</button></div></div>{tab === "orders" ? <OrderTable orders={recentOrders} /> : <Journal events={events} />}<div className="table-foot"><span>{tab === "orders" ? "Broker source: Alpaca paper /v2/orders" : `Source: OCaml event journal on Dublin · ${telemetry?.journalComplete ? "complete window" : "older events retained on VPS"}`}</span><span>{telemetry ? `Captured ${time(telemetry.generatedAt)}` : "Signed telemetry pending"}</span></div></section>
+    <section className="panel execution-panel" id="execution"><div className="panel-head"><div><p className="eyebrow">04 / EXECUTION & EVIDENCE</p><h2>Paper activity</h2></div><div className="section-tabs"><button className={tab === "fills" ? "active" : ""} onClick={() => setTab("fills")}>Executed fills</button><button className={tab === "orders" ? "active" : ""} onClick={() => setTab("orders")}>Broker orders</button><button className={tab === "journal" ? "active" : ""} onClick={() => setTab("journal")}>Agent journal</button></div></div>{tab === "fills" ? <FillTable fills={recentFills} /> : tab === "orders" ? <OrderTable orders={recentOrders} /> : <Journal events={events} />}<div className="table-foot"><span>{tab === "fills" ? `Alpaca paper FILL activities · ${telemetry?.fillsComplete ? "complete API result" : "completeness not verified"}` : tab === "orders" ? "Broker source: Alpaca paper /v2/orders" : `Source: OCaml event journal on Dublin · ${telemetry?.journalComplete ? "complete window" : "older events retained on VPS"}`}</span><span>{telemetry ? `Captured ${time(telemetry.generatedAt)}` : "Signed telemetry pending"}</span></div></section>
     <footer><div><span className="brand-mark mini">J<span>·</span>S</span> Independent engineering project. No Jane Street affiliation.</div><p>Paper fills are simulated. Pattern shapes and indicators are uncalibrated; live trading may lose money after spread, fees and slippage.</p><div className="footer-links"><a href="https://pattern-forge-five.vercel.app/" target="_blank" rel="noreferrer">Pattern Forge ↗</a><a href="https://app.alpaca.markets/dashboard/overview" target="_blank" rel="noreferrer">Alpaca paper dashboard ↗</a></div></footer>
     </div>
   </main>;

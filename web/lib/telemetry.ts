@@ -14,6 +14,18 @@ export type PaperOrder = {
   filledAt: string | null;
 };
 
+export type PaperFill = {
+  id: string;
+  orderId: string;
+  clientOrderId: string;
+  symbol: string;
+  side: string;
+  type: string;
+  qty: string;
+  price: string;
+  transactionTime: string | null;
+};
+
 export type PaperPosition = {
   symbol: string;
   qty: string;
@@ -38,6 +50,8 @@ export type PaperTelemetry = {
   positions: PaperPosition[];
   orders: PaperOrder[];
   ordersComplete: boolean;
+  fills?: PaperFill[];
+  fillsComplete?: boolean;
   journal: JournalEvent[];
   journalComplete: boolean;
 };

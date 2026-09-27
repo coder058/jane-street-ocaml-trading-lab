@@ -4,6 +4,15 @@ An auditable live market monitor and **Alpaca paper-only** execution experiment,
 written in OCaml. This is an independent portfolio project, not affiliated with
 Jane Street or Alpaca. It does not claim a profitable strategy.
 
+**Live read-only monitor:** [jane-street-paper-monitor.vercel.app](https://jane-street-paper-monitor.vercel.app/)
+
+The Dublin VPS runs the OCaml paper adapter and an independent read-only
+Alpaca US market-data collector. It signs a sanitized broker and journal
+snapshot for Vercel; no Alpaca secret is sent to the website. The dashboard
+shows actual paper orders, the pre-existing AAPL position, feed health, and
+Pattern Forge closed-candle context. The paper account's equity includes AAPL
+and is **not** a performance result for this bot.
+
 ## Current behavior
 
 - Polls Alpaca's public BTC/USD quote endpoint and logs timestamp, bid, ask,

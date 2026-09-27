@@ -107,6 +107,7 @@ def probe(bars: list[dict], holdout_start: date, fee: float, spread_bps: float) 
         "holdout": window(holdout, prior[1], prior[2]),
         "calendar_years": annual,
         "all_trades": len(trades),
+        "trade_log": [{"date": day.isoformat(), "side": side} for day, side in trades],
         "scope": "Exploratory full-capital normalized midpoint-bar probe with an uncalibrated feature and cost proxy. It does not implement the paper bot's $30 order cap. No real fill, latency, fee-tier, funding or live profitability inference.",
     }
 

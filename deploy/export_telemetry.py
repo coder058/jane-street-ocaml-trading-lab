@@ -34,6 +34,11 @@ ORDER_PAGE_SIZE = 500
 # GUESS: # UNCALIBRATED GUESS — stop after 20 pages to bound API work; the
 # completeness field makes a truncated account history visible to viewers.
 MAX_ORDER_PAGES = 20
+# SOURCE: Alpaca Account Activities documents 100 results per page without date.
+FILL_PAGE_SIZE = 100
+# GUESS: # UNCALIBRATED GUESS — stop after 20 activity pages and disclose if
+# incomplete; inspect account size before choosing a long-term archive policy.
+MAX_FILL_PAGES = 20
 # GUESS: # UNCALIBRATED GUESS — retain 4,000 recent journal lines in each
 # snapshot; older lines remain on the VPS and must be archived separately.
 MAX_JOURNAL_LINES = 4_000
@@ -101,6 +106,42 @@ def broker_orders(credentials: dict[str, str]) -> tuple[list[dict[str, object]],
     return projected, complete
 
 
+def broker_fills(credentials: dict[str, str], orders: list[dict[str, object]]) -> tuple[list[dict[str, object]], bool]:
+    by_order_id = {order["id"]: order["clientOrderId"] for order in orders}
+    fills: list[dict[str, object]] = []
+    token: str | None = None
+    complete = False
+    for _ in range(MAX_FILL_PAGES):
+        query = {"direction": "desc", "page_size": str(FILL_PAGE_SIZE)}
+        if token:
+            query["page_token"] = token
+        page = paper_get("/v2/account/activities/FILL?" + urllib.parse.urlencode(query), credentials)
+        if not isinstance(page, list):
+            raise ValueError("Alpaca FILL activities response was not an array")
+        fills.extend(page)
+        if len(page) < FILL_PAGE_SIZE:
+            complete = True
+            break
+        last = page[-1]
+        if not isinstance(last, dict) or not isinstance(last.get("id"), str):
+            raise ValueError("Alpaca FILL pagination has no last ID")
+        if token == last["id"]:
+            raise ValueError("Alpaca FILL pagination did not advance")
+        token = last["id"]
+    projected = [{
+        "id": fill.get("id", ""),
+        "orderId": fill.get("order_id", ""),
+        "clientOrderId": by_order_id.get(fill.get("order_id"), ""),
+        "symbol": fill.get("symbol", ""),
+        "side": fill.get("side", ""),
+        "type": fill.get("type", ""),
+        "qty": fill.get("qty", "0"),
+        "price": fill.get("price", "0"),
+        "transactionTime": fill.get("transaction_time"),
+    } for fill in fills]
+    return projected, complete
+
+
 def journal() -> tuple[list[dict[str, str]], bool]:
     rows: list[dict[str, str]] = []
     for path in (BACKFILL_PATH, EVENTS_PATH):
@@ -145,12 +186,17 @@ def capture_state(service: dict[str, object]) -> dict[str, object]:
     }
 
 
-def significant_digest(events: list[dict[str, str]], service: dict[str, object]) -> str:
+def significant_digest(events: list[dict[str, str]], service: dict[str, object],
+                       document: dict[str, object]) -> str:
     meaningful = [event for event in events if event["message"].startswith((
         "SEND ", "ACK ", "reconcile ", "HALT ", "DATA_ERROR ",
         "REJECTED ", "UNCERTAIN ", "start ",
     ))]
-    payload = json.dumps({"service": service, "events": meaningful}, sort_keys=True)
+    orders = [{key: order.get(key) for key in ("id", "status", "filledQty")}
+              for order in document["orders"]]
+    fills = [fill["id"] for fill in document["fills"]]
+    payload = json.dumps({"service": service, "events": meaningful,
+                          "orders": orders, "fills": fills}, sort_keys=True)
     return hashlib.sha256(payload.encode()).hexdigest()
 
 
@@ -159,6 +205,7 @@ def snapshot(credentials: dict[str, str], service: dict[str, object],
     account = paper_get("/v2/account", credentials)
     positions = paper_get("/v2/positions", credentials)
     orders, orders_complete = broker_orders(credentials)
+    fills, fills_complete = broker_fills(credentials, orders)
     if not isinstance(account, dict) or not isinstance(positions, list):
         raise ValueError("Alpaca account or positions response has an unexpected shape")
     return {
@@ -182,6 +229,8 @@ def snapshot(credentials: dict[str, str], service: dict[str, object],
         } for position in positions],
         "orders": orders,
         "ordersComplete": orders_complete,
+        "fills": fills,
+        "fillsComplete": fills_complete,
         "journal": events,
         "journalComplete": journal_complete,
     }
@@ -198,7 +247,8 @@ def main() -> int:
         return 1
     events, journal_complete = journal()
     service = service_state(credentials)
-    digest = significant_digest(events, service)
+    document = snapshot(credentials, service, events, journal_complete)
+    digest = significant_digest(events, service, document)
     previous = {}
     if SYNC_PATH.exists():
         try:
@@ -209,14 +259,13 @@ def main() -> int:
     if not args.dry_run and digest == previous.get("digest") and now - float(previous.get("sentAt", 0)) < HEARTBEAT_SECONDS:
         print("telemetry: unchanged, heartbeat not due")
         return 0
-    document = snapshot(credentials, service, events, journal_complete)
     body = json.dumps(document, separators=(",", ":"), sort_keys=True).encode()
     # GUESS: # UNCALIBRATED GUESS — match the 1 MiB ingestion limit on Vercel;
     # archive/paginate history when this becomes insufficient.
     if len(body) > 1_048_576:
         raise ValueError("telemetry exceeds the signed endpoint limit")
     if args.dry_run:
-        print(f"telemetry: dry run, mode={service['mode']}, {len(document['positions'])} positions, {len(document['orders'])} orders, {len(events)} events, complete_orders={document['ordersComplete']}, complete_journal={journal_complete}, {len(body)} bytes")
+        print(f"telemetry: dry run, mode={service['mode']}, {len(document['positions'])} positions, {len(document['orders'])} orders, {len(document['fills'])} fills, {len(events)} events, complete_orders={document['ordersComplete']}, complete_fills={document['fillsComplete']}, complete_journal={journal_complete}, {len(body)} bytes")
         return 0
     private_key = serialization.load_pem_private_key(KEY_PATH.read_bytes(), password=None)
     signature = base64.b64encode(private_key.sign(body)).decode("ascii")
@@ -232,7 +281,7 @@ def main() -> int:
     temporary.write_text(json.dumps({"digest": digest, "sentAt": now}), encoding="utf-8")
     os.chmod(temporary, 0o600)  # SOURCE: owner-only local synchronization state.
     os.replace(temporary, SYNC_PATH)
-    print(f"telemetry: uploaded signed paper snapshot, {len(document['orders'])} broker orders, {len(events)} journal events")
+    print(f"telemetry: uploaded signed paper snapshot, {len(document['orders'])} broker orders, {len(document['fills'])} fills, {len(events)} journal events")
     return 0
 
 
