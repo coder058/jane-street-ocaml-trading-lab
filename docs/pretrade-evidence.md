@@ -45,6 +45,33 @@ exchange/VPS clock offset was not independently calibrated, so these deltas
 must not be called one-way network latency. No fill behavior or predictive
 performance follows from this short capture.
 
+### One frozen daily-rule probe, not an execution claim
+
+The read-only [daily-bar downloader](../research/fetch_daily_bars.py) saved
+**1,730 closed Alpaca US BTC/USD daily bars** from 1 January 2022 through 26
+September 2026; the audit found no missing calendar days. Before calculating
+returns, I chose the 2026 calendar boundary as an **UNCALIBRATED GUESS** for a
+holdout. [ema_probe.py](../research/ema_probe.py) tests one uncalibrated rule:
+long BTC when the prior daily close's EMA20 exceeds EMA50, otherwise flat, with
+the trade modeled at the next day's midpoint open. EMA20/50 was taken from the
+Pattern Forge display; its use as a trade rule is a guess. The model charges
+Alpaca's documented first-tier 0.25% taker fee on both sides and a **4.208061
+basis-point round-trip spread proxy** based on only 42 observed stream quotes.
+Daily bars can contain quote midpoints, so these modeled fills are not
+executable evidence.
+
+| Period | Rule return | Buy/hold return | Rule maximum drawdown | Rule trades |
+| --- | ---: | ---: | ---: | ---: |
+| 20 Feb 2022–26 Sep 2026 (1,680 sessions) | +68.28% | +109.30% | −44.05% | 29 |
+| 2026 holdout to 26 Sep (269 sessions) | +3.88% | −3.52% | −10.73% | 5 |
+
+The single partial-year holdout is weak evidence; the full period trails a
+simple buy/hold benchmark by about 41.02 percentage points under this proxy.
+The 2022 and 2025 calendar returns of the rule were negative (−40.01% and
+−1.48%). This is not a calibrated strategy, and no causal contribution from
+Pattern Forge or Energy Monitor has been established. It does not pass the
+decision gate for new paper orders.
+
 ## Inputs and their limits
 
 | Input | Available evidence | Trading limit |
