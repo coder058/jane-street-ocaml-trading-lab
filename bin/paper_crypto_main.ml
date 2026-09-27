@@ -76,8 +76,10 @@ let reconcile_pending () =
           (match Paper_broker.order_status order with
            | None -> Error "pending order has no status"
            | Some status ->
-             log "reconcile id=%s side=%s status=%s filled_qty=%.9f"
-               id side status (filled_qty order);
+             log "reconcile id=%s side=%s status=%s filled_qty=%.9f broker_filled_at=%s"
+               id side status (filled_qty order)
+               (Option.value (Paper_broker.string (Paper_broker.member "filled_at" order))
+                  ~default:"none");
              if List.mem status [ "filled"; "canceled"; "expired"; "rejected" ] then (
                if side = "buy" && filled_qty order > 0. then
                  write_atomic owned_path id;
@@ -157,8 +159,22 @@ let try_order ?received_ns (previous : Paper_crypto.quote)
                  let id = client_id side current.timestamp in
                  write_atomic pending_path (side ^ " " ^ id);
                  log "SEND paper %s BTC/USD qty=%.9f limit=%g id=%s" side qty price id;
-                 match Paper_broker.submit_ioc ~side ~qty ~limit_price:price
-                         ~client_order_id:id with
+                 let submitted_ns =
+                   int_of_float (Unix.gettimeofday () *. 1_000_000_000.) in
+                 let response = Paper_broker.submit_ioc ~side ~qty ~limit_price:price
+                     ~client_order_id:id in
+                 let responded_ns =
+                   int_of_float (Unix.gettimeofday () *. 1_000_000_000.) in
+                 (* # SOURCE: one millisecond is one million nanoseconds. *)
+                 log "ORDER_TIMING id=%s receive_to_http_ms=%s http_roundtrip_ms=%.3f"
+                   id
+                   (match received_ns with
+                    | None -> "unavailable"
+                    | Some received_ns ->
+                      Printf.sprintf "%.3f"
+                        (float_of_int (submitted_ns - received_ns) /. 1_000_000.))
+                   (float_of_int (responded_ns - submitted_ns) /. 1_000_000.);
+                 match response with
                  | Error e when String.starts_with ~prefix:"HTTP 422:" e ->
                    (* # SOURCE: HTTP 422 is a definite validation rejection;
                       no order was accepted for this client ID. *)
