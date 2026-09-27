@@ -36,7 +36,7 @@ def event_time_seconds(value: str) -> float:
     return datetime.fromisoformat(normalized).astimezone(timezone.utc).timestamp()
 
 
-def audit(path: Path) -> dict:
+def audit(path: Path, symbol: str = "BTC/USD") -> dict:
     counts: Counter[str] = Counter()
     latencies: dict[str, list[float]] = {kind: [] for kind in ("q", "t", "o")}
     bar_delivery_lags: dict[str, list[float]] = {kind: [] for kind in ("b", "u")}
@@ -55,8 +55,10 @@ def audit(path: Path) -> dict:
                 raise ValueError(f"invalid JSON at line {line_number}; do not treat capture as complete") from error
             event = record["event"]
             kind = event["T"]
-            if record["feed"] != "alpaca-us" or event.get("S") != "BTC/USD" or kind not in (*latencies, *bar_delivery_lags):
-                raise ValueError(f"unexpected feed, symbol or event type at line {line_number}")
+            if record["feed"] != "alpaca-us" or kind not in (*latencies, *bar_delivery_lags):
+                raise ValueError(f"unexpected feed or event type at line {line_number}")
+            if event.get("S") != symbol:
+                continue
             received_ns = int(record["receivedAtNs"])
             if received_first is None:
                 received_first = received_ns
@@ -104,6 +106,7 @@ def audit(path: Path) -> dict:
                     invalid_bars += 1
     return {
         "path": str(path),
+        "symbol": symbol,
         "events": dict(counts),
         "first_received_ns": received_first,
         "last_received_ns": received_last,
@@ -123,8 +126,9 @@ def audit(path: Path) -> dict:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("capture", type=Path)
+    parser.add_argument("--symbol", default="BTC/USD")
     args = parser.parse_args()
-    print(json.dumps(audit(args.capture), indent=2))
+    print(json.dumps(audit(args.capture, args.symbol), indent=2))
 
 
 if __name__ == "__main__":

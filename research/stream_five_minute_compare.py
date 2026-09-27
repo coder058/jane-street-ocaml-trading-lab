@@ -33,7 +33,7 @@ def compare(capture: Path, document: dict) -> dict:
             if event.get("T") != "b":
                 continue
             if event.get("S") != "BTC/USD":
-                raise ValueError("wrong stream symbol")
+                continue
             minute = minute_number(event["t"])
             # SOURCE: UTC 5Min framing. No missing one-minute slot is filled.
             group = minute // 5 * 5

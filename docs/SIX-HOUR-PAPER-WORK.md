@@ -216,6 +216,33 @@ Codex follow-ups. This file is the handoff for the scheduled follow-up loop.
   the inspector in the browser. A sub-cent open P&L display was corrected so
   rounding cannot show a misleading negative zero. The final deployment check
   for that last formatting change remained outstanding at this checkpoint.
+- At 23:23 UTC, a read-only paper asset inventory found 73 active tradable
+  crypto pairs, 36 against USD. DIA, XLE and XOP were active/tradable US
+  equity ETF proxies, not actual Dow or energy commodity feeds. This catalog
+  count is not a measured simultaneous stream capacity.
+- At 23:26 UTC, the Dublin collector was changed to archive ETH/USD and
+  SOL/USD quotes and closed/revised minute bars alongside BTC/USD. The local
+  OCaml socket still receives only BTC events; the order executable and its
+  $100/$500 paper controls did not change. The Alpaca subscription authenticated
+  and both new symbols produced real quotes and a closed minute bar. The
+  collector had no restart or error immediately after rollout, and the OCaml
+  service logged a new BTC feed baseline. Nineteen Python tests passed before
+  deployment, including the BTC-only routing and gap/revision checks.
+- An as-received, as-of UTC aggregator now audits 1m/5m/30m/1h/4h bars without
+  fabricating missing minutes. At 23:27:57 UTC, BTC had 867 distinct closed
+  1m bars, 140 complete 5m groups, 13 complete 30m groups, five complete 1h
+  groups and zero complete 4h groups in that day's capture. ETH and SOL each
+  had one closed minute after joining. No new symbol or timeframe has order
+  authority; no stop distance or win probability is calibrated.
+- At 23:30 UTC, the read-only Alpaca US historical 5m scan found 13 of the
+  36 paper-tradable USD pairs with no missing slot between their first and
+  last returned bar for the UTC day. ETH had 250 bars with 32 gaps and SOL
+  had 280 with two gaps. This retrieval-later scan is only a data-coverage
+  screen, not a point-in-time strategy test. The authenticated stream was
+  expanded at 23:31 UTC to those 13 plus ETH and SOL, 15 symbols total,
+  retaining BTC-only hot fanout and order authority. Ten symbols had actual
+  events in the first 30 seconds; sustained throughput and all-symbol bar
+  coverage remain unmeasured.
 
 ## Next verified steps
 

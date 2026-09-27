@@ -25,6 +25,16 @@ ENV_PATH = Path("/etc/jsbot-paper.env")
 CAPTURE_DIR = Path("/home/ubuntu/jsbot-paper-state/market-capture/us")
 HOT_SOCKET = Path("/home/ubuntu/jsbot-paper-state/alpaca-hot.sock")
 SYMBOL = "BTC/USD"  # SOURCE: the OCaml paper bot's only traded symbol.
+# SOURCE: Pattern Forge follows ETH and SOL; the remaining symbols had zero
+# 5m historical gaps in the 2026-09-27 23:30 UTC same-day account scan.
+# This is a data-coverage selection, not evidence of profitable signals.
+# All remain research-only; none receives OCaml paper order authority.
+RESEARCH_SYMBOLS = (
+    "AAVE/USD", "ADA/USD", "ARB/USD", "AVAX/USD", "DOT/USD", "ETH/USD",
+    "FIL/USD", "GRT/USD", "LDO/USD", "ONDO/USD", "RENDER/USD", "SOL/USD",
+    "SUSHI/USD", "WIF/USD",
+)
+ARCHIVED_SYMBOLS = (SYMBOL, *RESEARCH_SYMBOLS)
 # GUESS: # UNCALIBRATED GUESS — stop collecting before the 49 GB free disk
 # observed on Dublin is nearly exhausted. Replace with measured capacity alert.
 MIN_FREE_BYTES = 5 * 1024 * 1024 * 1024
@@ -39,6 +49,31 @@ RECONNECT_SECONDS = 5
 
 class CaptureGuardError(Exception):
     """A storage or feed-integrity condition requiring operator review."""
+
+
+def subscription_request() -> dict:
+    return {"action": "subscribe", "quotes": list(ARCHIVED_SYMBOLS),
+            "trades": [SYMBOL], "orderbooks": [SYMBOL],
+            "bars": list(ARCHIVED_SYMBOLS), "updatedBars": list(ARCHIVED_SYMBOLS)}
+
+
+def valid_subscription(item: dict) -> bool:
+    request = subscription_request()
+    return all(set(symbols).issubset(set(item.get(channel, [])))
+               for channel, symbols in request.items() if channel != "action")
+
+
+def valid_market_event(item: dict) -> bool:
+    symbol = item.get("S")
+    kind = item.get("T")
+    return (isinstance(item.get("t"), str)
+            and (symbol == SYMBOL and kind in ("q", "t", "o", "b", "u")
+                 or symbol in RESEARCH_SYMBOLS and kind in ("q", "b", "u")))
+
+
+def should_fanout(event: dict) -> bool:
+    """Only the existing BTC quote/bar channel reaches the OCaml order process."""
+    return event.get("S") == SYMBOL and event.get("T") in ("q", "b", "u")
 
 
 def credentials() -> tuple[str, str]:
@@ -114,7 +149,7 @@ class LocalFanout:
         self.socket.close()
 
     def send(self, record: dict) -> None:
-        if record["event"]["T"] not in ("q", "b", "u"):
+        if not should_fanout(record["event"]):
             return
         self.hot_sequence += 1
         hot_record = {**record, "hotSequence": self.hot_sequence}
@@ -158,18 +193,15 @@ async def session(archive: Archive, fanout: LocalFanout) -> None:
                     raise RuntimeError(f"Alpaca stream error code={item.get('code')}")
                 if kind == "success" and item.get("msg") == "authenticated":
                     authenticated = True
-                    await socket.send(json.dumps({"action": "subscribe", "quotes": [SYMBOL],
-                                                  "trades": [SYMBOL], "orderbooks": [SYMBOL],
-                                                  "bars": [SYMBOL], "updatedBars": [SYMBOL]}))
+                    await socket.send(json.dumps(subscription_request()))
                 elif kind == "subscription":
-                    expected = all(SYMBOL in item.get(channel, []) for channel in
-                                   ("quotes", "trades", "orderbooks", "bars", "updatedBars"))
+                    expected = valid_subscription(item)
                     if not authenticated or not expected:
                         raise CaptureGuardError("Alpaca stream subscription was incomplete")
                     subscribed = True
-                    print("market capture: authenticated; BTC/USD quotes, trades, orderbooks and closed-minute bars", flush=True)
+                    print(f"market capture: authenticated; BTC execution feed and {len(ARCHIVED_SYMBOLS)} research quote/bar symbols", flush=True)
                 elif kind in ("q", "t", "o", "b", "u"):
-                    if not subscribed or item.get("S") != SYMBOL or not isinstance(item.get("t"), str):
+                    if not subscribed or not valid_market_event(item):
                         raise CaptureGuardError("unexpected stream market event")
                     fanout.send(archive.write(item))
                     fanout.report()

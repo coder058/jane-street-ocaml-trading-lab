@@ -17,7 +17,11 @@ and is **not** a performance result for this bot.
 
 - The Dublin collector archives Alpaca US BTC/USD WebSocket quotes, trades,
   order books, closed-minute bars and later bar revisions with receipt times.
-  It sends quotes and bars to OCaml over a local Unix socket. Session IDs and
+  It also archives quotes and minute bars for a 15-pair crypto research
+  watchlist selected from paper assets and a same-day data-coverage scan.
+  Only BTC quotes and bars reach OCaml over the local Unix socket; the other
+  pairs cannot trigger orders. The [multi-asset research boundary](docs/MULTI-ASSET-RESEARCH.md)
+  records the measured market catalog and five requested timeframes. Session IDs and
   a per-consumer sequence expose reconnects and lost datagrams.
 - The OCaml service is running in `PAPER_ORDER` mode with `PAPER_ORDERS=1` on
   Dublin as of 27 September 2026. It receives each quote and evaluates the

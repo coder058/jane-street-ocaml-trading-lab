@@ -16,13 +16,15 @@ def minute(value: str) -> int:
     return int(parsed.timestamp()) // 60
 
 
-def audit(path: Path) -> dict:
+def audit(path: Path, symbol: str = "BTC/USD") -> dict:
     starts: set[int] = set()
     duplicates = 0
     revisions = 0
     with path.open(encoding="utf-8") as source:
         for line in source:
             event = json.loads(line)["event"]
+            if event.get("S") != symbol:
+                continue
             if event["T"] == "u":
                 revisions += 1
             elif event["T"] == "b":
@@ -31,7 +33,7 @@ def audit(path: Path) -> dict:
                     duplicates += 1
                 starts.add(start)
     if not starts:
-        return {"path": str(path), "closedBars": 0}
+        return {"path": str(path), "symbol": symbol, "closedBars": 0}
     ordered = sorted(starts)
     gaps = [right - left - 1 for left, right in zip(ordered, ordered[1:])]
     missing = sum(gaps)
@@ -51,6 +53,7 @@ def audit(path: Path) -> dict:
     # are counted, never filled with synthetic zero-volume candles.
     return {
         "path": str(path),
+        "symbol": symbol,
         "firstMinute": ordered[0],
         "lastMinute": ordered[-1],
         "elapsedMinuteSlots": ordered[-1] - ordered[0] + 1,
@@ -68,8 +71,9 @@ def audit(path: Path) -> dict:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("capture", type=Path)
+    parser.add_argument("--symbol", default="BTC/USD")
     arguments = parser.parse_args()
-    print(json.dumps(audit(arguments.capture), indent=2))
+    print(json.dumps(audit(arguments.capture, arguments.symbol), indent=2))
 
 
 if __name__ == "__main__":
