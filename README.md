@@ -37,9 +37,11 @@ and is **not** a performance result for this bot.
 - An order journal is written before the API call. An ambiguous response
   blocks the next order until the previous client order ID is reconciled.
 - A persistent ownership marker prevents the bot from selling a BTC position
-  that predates its own buy. The BTC position and each order remain under the
-  user's $30 cap. Repeated completed round trips have no daily turnover cap;
-  the $300 per-bot capital guidance is not treated as a daily spend limit.
+  that predates its own buy. The current paper baseline is $100 per buy with a
+  $500 BTC exposure ceiling. The requested $50 and $500 probability tiers are
+  defined but cannot be selected until probabilities are calibrated. Repeated
+  completed round trips have no daily turnover cap. These amounts supersede
+  the earlier $2–$30 order and $300-per-bot guidance.
 - Credentials are sent to `curl` through standard input rather than argv;
   credential variables are stripped from the child process environment.
 - An append-only local journal records quotes, decisions and broker responses.
@@ -50,8 +52,10 @@ and is **not** a performance result for this bot.
 - `web/` contains the Vercel paper monitor. Dublin exports broker snapshots
   and the journal with Ed25519 signatures; Vercel never receives Alpaca keys.
 
-The strategy rule and $20 diagnostic size are **uncalibrated guesses**. They
-exercise an order lifecycle and do not imply an edge. Between 08:36 and 10:26
+The quote-cross strategy rule remains **uncalibrated**. The user specified the
+new $100 baseline paper size on 27 September; neither its risk nor edge has
+been calibrated. The requested Murphy/candlestick/Markov probability strategy
+has no order authority yet. Between 08:36 and 10:26
 UTC on 27 September, the earlier 30-second REST version sent 20 paper orders,
 received 20 broker acknowledgements and reconciled all 20. It used
 $299.999246395 of a then-active $300 daily buy-attempt budget; the broker later showed

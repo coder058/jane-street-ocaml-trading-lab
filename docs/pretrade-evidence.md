@@ -154,10 +154,12 @@ own publication-time audit.
    paper test. Reconcile fills, cancellations, fees, holdings, order IDs,
    data-feed failures and restarts. Paper results remain separate from any
    claim about live returns.
-6. **Enforce independent risk controls.** Keep the exact paper origin, the
-   user's $300-per-bot capital and $2–$30 order guidance, minimum order rules,
-   one pending order, the $30 BTC position cap and AAPL protection. The user
-   clarified that repeated paper round trips have no daily turnover cap. A new loss
+6. **Enforce independent risk controls.** Keep the exact paper origin,
+   minimum order rules, one pending order, the current $500 BTC exposure ceiling
+   and AAPL protection. The user replaced the earlier $300-per-bot/$2–$30
+   guidance on 27 September with a $100 experimental baseline and requested
+   $50/$500 probability tiers that still require calibration. Repeated paper
+   round trips have no daily turnover cap. A new loss
    limit or signal threshold needs real calibration; it must not be guessed
    silently. A breach or unknown broker state halts execution.
 

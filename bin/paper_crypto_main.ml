@@ -125,17 +125,17 @@ let try_order ?received_ns (previous : Paper_crypto.quote)
            match action with
            | Paper_crypto.Hold reason -> log "HOLD %s" reason; None
            | Paper_crypto.Buy ->
-             (* # GUESS: $20 diagnostic order size; calibrate with actual
-                spreads, fees and fill data. # UNCALIBRATED GUESS *)
-             if buying_power < 20. then (log "HOLD buying power below $20"; None)
+             let target = Paper_crypto.order_notional Paper_crypto.Experimental_baseline in
+             let limit_price = ceil (current.ask /. tick) *. tick in
+             if buying_power < target then
+               (log "HOLD non-marginable buying power below paper target %.2f" target; None)
              else Option.map (fun q -> "buy", q,
-               ceil (current.ask /. tick) *. tick)
-                 (Paper_crypto.buy_qty ~ask:current.ask)
+               limit_price)
+                 (Paper_crypto.buy_qty ~ask:limit_price ~notional:target)
            | Paper_crypto.Sell ->
-             (* # SOURCE: user specified $30 maximum order size. *)
-             if position_qty *. current.bid > 30. then
-               (log "HALT BTC position above user $30 order cap"; None)
-             else if Paper_crypto.is_dust ~price:current.bid ~qty:position_qty then
+             (* # SOURCE: an exit may exceed the entry budget after a price rise;
+                allow a risk-reducing sale of the entire bot-owned position. *)
+             if Paper_crypto.is_dust ~price:current.bid ~qty:position_qty then
                (log "HOLD owned BTC position below Alpaca $10 sell minimum"; None)
              else Some ("sell", position_qty,
                floor (current.bid /. tick) *. tick)
@@ -145,10 +145,9 @@ let try_order ?received_ns (previous : Paper_crypto.quote)
           | Some (side, qty, price) ->
             let notional = qty *. price in
                if side = "buy" &&
-                 (position_qty *. current.ask +. notional > 30.) then
-                 (* # SOURCE: user specified $30 maximum paper position/order size;
-                    cumulative turnover has no daily cap. *)
-                 log "HOLD new buy would exceed user $30 BTC position cap"
+                 (position_qty *. current.ask +. notional > Paper_crypto.max_position_notional) then
+                 (* # SOURCE: user's $500 maximum paper bet; turnover has no daily cap. *)
+                 log "HOLD new buy would exceed user $500 BTC position cap"
                else if (match received_ns with
                  | None -> false
                  | Some received_ns ->
@@ -340,6 +339,9 @@ let run_hot_stream ~trade =
   let worker_lock_path = Filename.concat state_dir "order-worker.lock" in
   log "start mode=%s feed=alpaca_websocket state=%s"
     (if armed then "PAPER_ORDER" else "MONITOR") state_dir;
+  log "SIZING policy=experimental_baseline_v1 buy_usd=%.2f max_btc_exposure_usd=%.2f calibrated_low_high=false"
+    (Paper_crypto.order_notional Paper_crypto.Experimental_baseline)
+    Paper_crypto.max_position_notional;
   let lock_fd = Unix.openfile lock_path [ Unix.O_CREAT; Unix.O_RDWR ] 0o600 in
   Unix.lockf lock_fd Unix.F_LOCK 0;
   let socket = Unix.socket Unix.PF_UNIX Unix.SOCK_DGRAM 0 in

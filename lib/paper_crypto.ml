@@ -86,14 +86,24 @@ let decide ~previous ~current ~position_qty ~has_open_order =
   else if position_qty > 0. && current.ask < previous.bid then Sell
   else Hold "no cross-spread price move"
 
-let buy_qty ~ask =
-  (* # GUESS: $20 is within the user's $2-$30 order range and above Alpaca's
-     $10 crypto minimum. This is an engineering demonstration, not calibrated
-     size. Real fill/slippage data would calibrate it. # UNCALIBRATED GUESS *)
-  let notional = 20. in
+type sizing_tier = Experimental_baseline | Calibrated_lower | Calibrated_higher
+
+let order_notional = function
+  (* # SOURCE: user's 27 September 2026 instruction: $100 ordinary paper bet. *)
+  | Experimental_baseline -> 100.
+  (* # SOURCE: user's 27 September 2026 instruction: $50 lower-probability bet.
+     No signal is assigned this tier until probability calibration exists. *)
+  | Calibrated_lower -> 50.
+  (* # SOURCE: user's 27 September 2026 instruction: $500 higher-probability bet.
+     No signal is assigned this tier until probability calibration exists. *)
+  | Calibrated_higher -> 500.
+
+let max_position_notional = order_notional Calibrated_higher
+
+let buy_qty ~ask ~notional =
   (* # SOURCE: Alpaca crypto documentation allows up to 9 decimal places. *)
   let precision = 1_000_000_000. in
-  if not (positive_finite ask) then None
+  if not (positive_finite ask && positive_finite notional) then None
   else
     let qty = floor (notional /. ask *. precision) /. precision in
     if qty *. ask >= 10. then Some qty else None

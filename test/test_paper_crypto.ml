@@ -28,8 +28,16 @@ let () =
            ~current_received_ns:30_000_000_000) "sample at prior cadence";
   check (not (Paper_crypto.sample_due ~reference_received_ns:30_000_000_000
            ~current_received_ns:0)) "reject backward receipt time";
-  check (Paper_crypto.buy_qty ~ask:84_000. <> None) "valid qty";
-  check (Paper_crypto.buy_qty ~ask:0. = None) "invalid ask";
+  (* # SOURCE: user-specified tier sizes; the limit-price calculation may not
+     exceed the selected paper order notional after quantity rounding. *)
+  check (Paper_crypto.order_notional Experimental_baseline = 100.) "base tier";
+  check (Paper_crypto.order_notional Calibrated_lower = 50.) "lower tier";
+  check (Paper_crypto.order_notional Calibrated_higher = 500.) "higher tier";
+  let base_qty = Paper_crypto.buy_qty ~ask:84_000. ~notional:100. in
+  check (Option.is_some base_qty) "valid qty";
+  check (Option.get base_qty *. 84_000. <= 100.) "order notional cap";
+  check (Paper_crypto.buy_qty ~ask:0. ~notional:100. = None) "invalid ask";
+  check (Paper_crypto.buy_qty ~ask:84_000. ~notional:0. = None) "invalid target";
   (* # SOURCE: $10 Alpaca USD crypto minimum; synthetic values test boundary. *)
   check (Paper_crypto.is_dust ~price:100. ~qty:0.099) "subminimum dust";
   check (not (Paper_crypto.is_dust ~price:100. ~qty:0.1)) "minimum is tradable";

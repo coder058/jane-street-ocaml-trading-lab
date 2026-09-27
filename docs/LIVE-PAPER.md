@@ -13,8 +13,10 @@ quote sampled at the earlier REST loop's 30-second cadence; buy when the new
 bid rises above the reference ask, or sell the bot-owned position when the new
 ask falls below the reference bid. Every WebSocket quote is still received,
 validated and archived. This cross-spread rule has **not** been calibrated or shown to
-have an edge. The $20 diagnostic order is a guess within the user's $2–$30
-range and above Alpaca's documented $10 crypto minimum. The bot uses IOC limit
+have an edge. The user changed the paper sizing on 27 September: the active
+experimental baseline is $100 per buy and the BTC exposure ceiling is $500.
+The requested $50 lower and $500 higher probability tiers await a calibrated
+probability model; the live quote-cross rule does not label them. The bot uses IOC limit
 orders, one pending order at a time, a durable pre-submission journal, open
 order/account/position checks, a paper-only host, and an ownership marker. It
 refuses an existing BTC position it cannot attribute to itself. It does not
@@ -24,7 +26,7 @@ Alpaca may partially fill an IOC order and cancel its remainder. The first
 observed order on 27 September 2026 filled 0.000000020 BTC, leaving a net
 0.000000019 BTC position. The bot keeps ownership of that residual, suppresses
 sub-$10 sells, and permits a later buy only when the total BTC position would
-remain within the user's $30 position cap. Such a tiny fill is not evidence of
+remain within the current $500 position cap. Such a tiny fill is not evidence of
 strategy quality.
 
 Selected Pattern Forge indicator and shape formulas are computed from Alpaca
@@ -69,8 +71,9 @@ submissions and needs operator review.
 The older REST service sent 20 paper orders from 08:36–10:26 UTC on 27
 September; each had a broker acknowledgement and terminal reconciliation.
 Its buy attempts reached $299.999246395 of the then-active $300 daily budget.
-That daily limit was removed after the user's clarification; the $30 BTC
-position/order cap, pending-order reconciliation, and paper-only endpoint remain. The
+That daily limit was removed after the user's clarification. The earlier $30 BTC
+position/order cap was replaced on 27 September by the $100 baseline/$500
+exposure ceiling. Pending-order reconciliation and the paper-only endpoint remain. The
 WebSocket path began at 13:00 UTC. Its original adjacent-quote rule produced
 no candidate among 1,348 quote pairs audited from 13:16:05–13:38:43 UTC;
 the earlier 30-second cadence found six descriptive crosses among 34 samples.
