@@ -50,6 +50,11 @@ let midpoint q = (q.bid +. q.ask) /. 2.
 let spread_bps q = (q.ask -. q.bid) /. midpoint q *. 10_000.
 (* # SOURCE: one basis point is 1/10,000, by definition. *)
 
+let is_dust ~price ~qty =
+  (* # SOURCE: Alpaca documents a $10 minimum for USD crypto-pair orders. *)
+  positive_finite price && Float.is_finite qty && qty >= 0.
+  && qty *. price < 10.
+
 let decide ~previous ~current ~position_qty ~has_open_order =
   if has_open_order then Hold "broker has an open order"
   else if current.timestamp <= previous.timestamp then Hold "market quote has not advanced"

@@ -15,6 +15,13 @@ order/account/position checks, a paper-only host, and an ownership marker. It
 refuses an existing BTC position it cannot attribute to itself. It does not
 place live orders.
 
+Alpaca may partially fill an IOC order and cancel its remainder. The first
+observed order on 27 September 2026 filled 0.000000020 BTC, leaving a net
+0.000000019 BTC position. The bot keeps ownership of that residual, suppresses
+sub-$10 sells, and permits a later buy only when the total BTC position would
+remain within the user's $30 position cap. Such a tiny fill is not evidence of
+strategy quality.
+
 Pattern Forge reads Hyperliquid candles and Energy Monitor reads public
 electricity/gas feeds. Neither provides a calibrated signal for Alpaca BTC
 execution. Their current OCaml probes are not part of this order path. A later
@@ -29,6 +36,7 @@ authorization now would invent a trading relationship.
 cd /home/ubuntu/ocaml-paper-market-lab
 opam exec -- dune runtest --force
 opam exec -- dune exec bin/paper_crypto_main.exe -- --once
+sudo bash -c 'set -a; . /etc/jsbot-paper.env; set +a; /home/ubuntu/ocaml-paper-market-lab/_build/default/bin/paper_crypto_main.exe --check-positions'
 sudo systemctl status jsbot-paper --no-pager
 sudo journalctl -u jsbot-paper -n 30 --no-pager
 ```

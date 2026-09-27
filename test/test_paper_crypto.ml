@@ -22,6 +22,9 @@ let () =
            ~has_open_order:false = Hold "market quote has not advanced") "stale guard";
   check (Paper_crypto.buy_qty ~ask:84_000. <> None) "valid qty";
   check (Paper_crypto.buy_qty ~ask:0. = None) "invalid ask";
+  (* # SOURCE: $10 Alpaca USD crypto minimum; synthetic values test boundary. *)
+  check (Paper_crypto.is_dust ~price:100. ~qty:0.099) "subminimum dust";
+  check (not (Paper_crypto.is_dust ~price:100. ~qty:0.1)) "minimum is tradable";
   let payload = Yojson.Safe.from_string
     {|{"quotes":{"BTC/USD":{"bp":100.0,"ap":101.0,"bs":1.0,"as":2.0,"t":"2026-09-27T01:00:00Z"}}}|} in
   check (Result.is_ok (Paper_crypto.parse_quote payload)) "quote parse";

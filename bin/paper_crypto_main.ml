@@ -103,7 +103,7 @@ let broker_state () =
       Error ("paper account not tradable: " ^ status)
     else Ok (buying_power, position_qty, has_open_order, tick)
 
-let try_order previous current =
+let try_order (previous : Paper_crypto.quote) (current : Paper_crypto.quote) =
   match reconcile_pending () with
   | Error e -> log "HALT %s" e
   | Ok true -> log "HOLD pending order is still open"
@@ -117,7 +117,10 @@ let try_order previous current =
        else if position_qty = 0. && owned then
          log "HALT ownership marker present but BTC position is zero"
        else
-         let action = Paper_crypto.decide ~previous ~current ~position_qty
+         let owned_dust = owned && position_qty > 0.
+           && Paper_crypto.is_dust ~price:current.ask ~qty:position_qty in
+         let decision_qty = if owned_dust then 0. else position_qty in
+         let action = Paper_crypto.decide ~previous ~current ~position_qty:decision_qty
              ~has_open_order in
          let side_qty_price =
            match action with
@@ -133,6 +136,8 @@ let try_order previous current =
              (* # SOURCE: user specified $30 maximum order size. *)
              if position_qty *. current.bid > 30. then
                (log "HALT BTC position above user $30 order cap"; None)
+             else if Paper_crypto.is_dust ~price:current.bid ~qty:position_qty then
+               (log "HOLD owned BTC position below Alpaca $10 sell minimum"; None)
              else Some ("sell", position_qty,
                floor (current.bid /. tick) *. tick)
          in
@@ -147,6 +152,10 @@ let try_order previous current =
                   consume the daily budget even if later rejected. *)
                if side = "buy" && spent +. notional > 300. then
                  log "HOLD daily paper buy-attempt budget exhausted"
+               else if side = "buy" &&
+                 (position_qty *. current.ask +. notional > 30.) then
+                 (* # SOURCE: user specified $30 maximum paper position/order size. *)
+                 log "HOLD new buy would exceed user $30 BTC position cap"
                else (
                  let id = client_id side current.timestamp in
                  if side = "buy" then
@@ -156,6 +165,11 @@ let try_order previous current =
                  log "SEND paper %s BTC/USD qty=%.9f limit=%g id=%s" side qty price id;
                  match Paper_broker.submit_ioc ~side ~qty ~limit_price:price
                          ~client_order_id:id with
+                 | Error e when String.starts_with ~prefix:"HTTP 422:" e ->
+                   (* # SOURCE: HTTP 422 is a definite validation rejection;
+                      no order was accepted for this client ID. *)
+                   remove_if_exists pending_path;
+                   log "REJECTED validation: %s" e
                  | Error e -> log "UNCERTAIN submission: %s; journal retained" e
                  | Ok order ->
                    log "ACK id=%s status=%s" id
@@ -189,12 +203,42 @@ let run ~trade ~once =
 
 let () =
   let trade = ref false and once = ref false and check_broker = ref false in
+  let check_positions = ref false in
+  let check_order = ref None in
   Arg.parse [
     "--paper", Arg.Set trade, "Allow paper orders only with PAPER_ORDERS=1";
     "--once", Arg.Set once, "Fetch one live quote and exit";
     "--check-broker", Arg.Set check_broker, "Read paper account, orders, position and asset";
-  ] (fun _ -> ()) "paper_crypto_main [--paper] [--once|--check-broker]";
-  if !check_broker then
+    "--check-positions", Arg.Set check_positions, "Read paper positions without trading";
+    "--check-order", Arg.String (fun id -> check_order := Some id),
+      "Read one paper order by client ID and exit";
+  ] (fun _ -> ()) "paper_crypto_main [--paper] [--once|--check-broker|--check-positions|--check-order ID]";
+  if !check_order <> None then
+    match !check_order with
+    | None -> assert false
+    | Some id ->
+      (match Paper_broker.order_by_client_id id with
+       | Error e -> prerr_endline ("ORDER_CHECK_FAILED " ^ e); exit 1
+       | Ok order ->
+         Printf.printf "ORDER_CHECK_OK id=%s symbol=%s side=%s status=%s filled_qty=%.9f\n"
+           id
+           (Option.value (Paper_broker.string (Paper_broker.member "symbol" order)) ~default:"unknown")
+           (Option.value (Paper_broker.string (Paper_broker.member "side" order)) ~default:"unknown")
+           (Option.value (Paper_broker.order_status order) ~default:"unknown")
+           (filled_qty order))
+  else if !check_positions then
+    (match Paper_broker.get "/v2/positions" with
+     | Error e -> prerr_endline ("POSITIONS_CHECK_FAILED " ^ e); exit 1
+     | Ok (`List positions) ->
+       List.iter (fun p ->
+         let field name =
+           Option.value (Paper_broker.string (Paper_broker.member name p))
+             ~default:"unknown" in
+         Printf.printf "POSITION symbol=%s qty=%s side=%s avg_entry_price=%s\n"
+           (field "symbol") (field "qty") (field "side")
+           (field "avg_entry_price")) positions
+     | Ok _ -> prerr_endline "POSITIONS_CHECK_FAILED unexpected response"; exit 1)
+  else if !check_broker then
     match broker_state () with
     | Error e -> prerr_endline ("BROKER_CHECK_FAILED " ^ e); exit 1
     | Ok (buying_power, qty, open_order, tick) ->

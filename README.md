@@ -1,4 +1,4 @@
-# OCaml Paper Market Lab
+# Jane Street OCaml Trading Lab
 
 An auditable live market monitor and **Alpaca paper-only** execution experiment,
 written in OCaml. This is an independent portfolio project, not affiliated with
@@ -36,10 +36,12 @@ opam exec -- dune exec bin/paper_crypto_main.exe -- --once
 
 The `--once` mode reads one public quote and never places an order. The
 continuous Dublin service runs `--paper` with valid **paper** keys and
-`PAPER_ORDERS=1`. Authenticated read-only broker checks passed on 27 September
-2026. The service currently observes quotes and can send a paper order when its
-rule fires. A submitted or filled order must be checked in the Alpaca paper
-account before claiming active paper trading.
+`PAPER_ORDERS=1`. On 27 September 2026, Alpaca accepted one BTC/USD IOC buy
+attempt. It was canceled after a partial fill of 0.000000020 BTC; the net
+position reported separately was 0.000000019 BTC. This is a paper execution
+plumbing check, not a meaningful performance result. The bot now treats such
+sub-$10 holdings as dust and will not submit an invalid sell. The account's
+existing 10-share AAPL position is outside the bot's BTC/USD order path.
 
 Paper fills are simulated and can differ from live execution. Even a working
 paper order loop may lose money live after fees, spread, slippage, and adverse
