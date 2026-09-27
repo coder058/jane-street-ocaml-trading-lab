@@ -12,3 +12,8 @@
  (name test_pattern_forge)
  (modules test_pattern_forge)
  (libraries paper_market))
+
+(test
+ (name test_technical)
+ (modules test_technical)
+ (libraries paper_market))

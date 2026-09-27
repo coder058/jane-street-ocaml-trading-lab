@@ -38,6 +38,20 @@ let parse_quote j =
        Ok { bid; ask; bid_size; ask_size; timestamp }
      | _ -> Error "invalid BTC/USD quote fields")
 
+let parse_quote_event event =
+  match member "T" event, member "S" event with
+  | Some (`String "q"), Some (`String "BTC/USD") ->
+    (match number (member "bp" event), number (member "ap" event),
+           number (member "bs" event), number (member "as" event),
+           member "t" event with
+     | Some bid, Some ask, Some bid_size, Some ask_size, Some (`String timestamp)
+       when positive_finite bid && positive_finite ask && bid < ask
+            && positive_finite bid_size && positive_finite ask_size
+            && timestamp <> "" ->
+       Ok { bid; ask; bid_size; ask_size; timestamp }
+     | _ -> Error "invalid live BTC/USD quote event fields")
+  | _ -> Error "unexpected live quote event symbol or type"
+
 let quote_url =
   "https://data.alpaca.markets/v1beta3/crypto/us/latest/quotes?symbols=BTC%2FUSD"
 

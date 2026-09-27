@@ -10,8 +10,10 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import socket
 import sys
 import time
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -21,6 +23,7 @@ from websockets.asyncio.client import connect
 STREAM_URL = "wss://stream.data.alpaca.markets/v1beta3/crypto/us"
 ENV_PATH = Path("/etc/jsbot-paper.env")
 CAPTURE_DIR = Path("/home/ubuntu/jsbot-paper-state/market-capture/us")
+HOT_SOCKET = Path("/home/ubuntu/jsbot-paper-state/alpaca-hot.sock")
 SYMBOL = "BTC/USD"  # SOURCE: the OCaml paper bot's only traded symbol.
 # GUESS: # UNCALIBRATED GUESS — stop collecting before the 49 GB free disk
 # observed on Dublin is nearly exhausted. Replace with measured capacity alert.
@@ -49,10 +52,22 @@ def credentials() -> tuple[str, str]:
 
 class Archive:
     def __init__(self) -> None:
-        CAPTURE_DIR.mkdir(parents=True, exist_ok=True, mode=0o700)
+        # SOURCE: the archive contains market events only. The OCaml process
+        # needs group read access for point-in-time indicator warmup.
+        self.reader_group = os.stat("/home/ubuntu").st_gid
+        CAPTURE_DIR.mkdir(parents=True, exist_ok=True, mode=0o750)
+        os.chown(CAPTURE_DIR, 0, self.reader_group)
+        os.chmod(CAPTURE_DIR, 0o750)
         self.day = ""
         self.handle: int | None = None
         self.events = 0
+        self.session_id = ""
+        self.stream_sequence = 0
+
+    def begin_session(self) -> None:
+        # SOURCE: a new Alpaca WebSocket connection is a distinct capture session.
+        self.session_id = uuid.uuid4().hex
+        self.stream_sequence = 0
 
     def close(self) -> None:
         if self.handle is not None:
@@ -60,25 +75,71 @@ class Archive:
             os.close(self.handle)
             self.handle = None
 
-    def write(self, event: dict) -> None:
+    def write(self, event: dict) -> dict:
         received_ns = time.time_ns()
         day = datetime.fromtimestamp(received_ns / 1_000_000_000, timezone.utc).date().isoformat()
         if day != self.day:
             self.close()
             path = CAPTURE_DIR / f"{day}.jsonl"
-            self.handle = os.open(path, os.O_CREAT | os.O_APPEND | os.O_WRONLY, 0o600)
+            self.handle = os.open(path, os.O_CREAT | os.O_APPEND | os.O_WRONLY, 0o640)
+            os.fchown(self.handle, 0, self.reader_group)
+            os.fchmod(self.handle, 0o640)
             self.day = day
         self.events += 1
         if self.events % DISK_CHECK_EVENTS == 0:
             stats = os.statvfs(CAPTURE_DIR)
             if stats.f_bavail * stats.f_frsize < MIN_FREE_BYTES:
                 raise CaptureGuardError("market capture stopped: free disk below safety reserve")
-        record = {"receivedAtNs": received_ns, "feed": "alpaca-us", "event": event}
+        self.stream_sequence += 1
+        record = {"receivedAtNs": received_ns, "feed": "alpaca-us",
+                  "sessionId": self.session_id, "streamSequence": self.stream_sequence,
+                  "event": event}
         assert self.handle is not None
         os.write(self.handle, (json.dumps(record, separators=(",", ":")) + "\n").encode())
+        return record
 
 
-async def session(archive: Archive) -> None:
+class LocalFanout:
+    """Nonblocking local datagrams for an OCaml consumer; archive stays primary."""
+
+    def __init__(self) -> None:
+        self.socket = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
+        self.socket.setblocking(False)
+        self.hot_sequence = 0
+        self.sent = 0
+        self.dropped = 0
+        self.last_report = time.monotonic()
+
+    def close(self) -> None:
+        self.socket.close()
+
+    def send(self, record: dict) -> None:
+        if record["event"]["T"] not in ("q", "b", "u"):
+            return
+        self.hot_sequence += 1
+        hot_record = {**record, "hotSequence": self.hot_sequence}
+        try:
+            self.socket.sendto(json.dumps(hot_record, separators=(",", ":")).encode(), str(HOT_SOCKET))
+            self.sent += 1
+        except OSError:
+            # SOURCE: archival continues when the optional local consumer is absent.
+            self.dropped += 1
+
+    def report(self) -> None:
+        now = time.monotonic()
+        # GUESS: # UNCALIBRATED GUESS — report fanout counters once per minute to
+        # avoid one log line per market update; adjust after observing operations.
+        if now - self.last_report >= 60:
+            print(f"hot fanout session_sent={self.sent} session_dropped={self.dropped}", flush=True)
+            self.last_report = now
+
+
+async def session(archive: Archive, fanout: LocalFanout) -> None:
+    archive.begin_session()
+    fanout.hot_sequence = 0
+    fanout.sent = 0
+    fanout.dropped = 0
+    fanout.last_report = time.monotonic()
     key, secret = credentials()
     async with connect(STREAM_URL, max_size=MAX_MESSAGE_BYTES) as socket:
         await socket.send(json.dumps({"action": "auth", "key": key, "secret": secret}))
@@ -110,15 +171,17 @@ async def session(archive: Archive) -> None:
                 elif kind in ("q", "t", "o", "b", "u"):
                     if not subscribed or item.get("S") != SYMBOL or not isinstance(item.get("t"), str):
                         raise CaptureGuardError("unexpected stream market event")
-                    archive.write(item)
+                    fanout.send(archive.write(item))
+                    fanout.report()
 
 
 async def main() -> None:
     archive = Archive()
+    fanout = LocalFanout()
     try:
         while True:
             try:
-                await session(archive)
+                await session(archive, fanout)
                 raise ConnectionError("market stream closed")
             except (ConnectionError, OSError, TimeoutError) as error:
                 print(f"market capture: {type(error).__name__}: {error}", file=sys.stderr, flush=True)
@@ -126,6 +189,7 @@ async def main() -> None:
                 await asyncio.sleep(RECONNECT_SECONDS)
     finally:
         archive.close()
+        fanout.close()
 
 
 if __name__ == "__main__":

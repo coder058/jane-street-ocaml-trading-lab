@@ -1,10 +1,21 @@
-# Pre-trade evidence gate — 27 September 2026
+# Paper engineering evidence and strategy limits — 27 September 2026
 
 This is an independent paper-trading engineering project. No agent can ensure
-that every trade will be good. The current diagnostic cross-spread rule is
-**disarmed** (`PAPER_ORDERS=0`); Pattern Forge shapes and energy observations
-are read-only. Do not present a green build, a filled paper order or a chart
-pattern as evidence of predictive edge.
+that every trade will be good. The diagnostic cross-spread rule is **active in
+Alpaca paper only** (`PAPER_ORDERS=1` on Dublin as of 13:00 UTC). Pattern Forge
+shapes and energy observations remain descriptive. Do not present a green
+build, a filled paper order or a chart pattern as evidence of predictive edge.
+The earlier measurements below were recorded before this bounded paper run;
+the historical 2026 holdout was already examined.
+
+From 08:36 to 10:26 UTC, the earlier REST polling service sent, received
+acknowledgements for, and reconciled **20 additional paper orders**. Its
+durable journal shows $299.999246395 in buy attempts against the user's $300
+daily cap. The broker later showed no BTC position, no open order, and the
+pre-existing 10 AAPL shares. At 13:00 UTC the paper service switched to the
+Alpaca WebSocket quote feed. The live process received a quote and loaded
+closed-bar context, but a new WebSocket-triggered paper order had not yet been
+observed at this writing. Neither period demonstrates profitability.
 
 ## What was measured today
 
@@ -29,8 +40,8 @@ median** and **3.7743-basis-point p90**. These figures are computed from one
 short session, and repeated log rows are not independent market observations.
 Journal timestamps are rounded to whole seconds, which produced a minimum
 calculated age of −0.663541 seconds; this is a timestamp-resolution artifact,
-not evidence of a quote from the future. This audit reinforces the decision to
-leave the diagnostic rule disarmed; it does not measure a profitable edge.
+not evidence of a quote from the future. This audit motivated replacing the
+polling input with the WebSocket feed; it does not measure a profitable edge.
 
 The new private Alpaca US stream was audited with
 [stream_audit.py](../research/stream_audit.py) after 151 events: 42 quotes, two
@@ -97,14 +108,14 @@ The single partial-year holdout is weak evidence; the full period trails a
 simple buy/hold benchmark by about 41.02 percentage points under this proxy.
 The 2022 and 2025 calendar returns of the rule were negative (−40.01% and
 −1.48%). This is not a calibrated strategy, and no causal contribution from
-Pattern Forge or Energy Monitor has been established. It does not pass the
-decision gate for new paper orders.
+Pattern Forge or Energy Monitor has been established. The current paper
+orders are an engineering experiment, not a strategy approval.
 
 ## Inputs and their limits
 
 | Input | Available evidence | Trading limit |
 | --- | --- | --- |
-| Alpaca crypto quotes / order books | Alpaca documents a streaming feed for trades, quotes, books and bars. The OCaml service polls a latest-quote REST endpoint every 30 seconds; that interval is an **UNCALIBRATED GUESS**. A separate read-only collector now archives Alpaca US WebSocket quotes, trades, books and minute bars privately on Dublin with local receipt timestamps. | A stale quote or different venue must not become an entry price. The stream archive needs time, integrity checks and fill-quality research before it can support a strategy. The present polling order loop is unsuitable for scalping. |
+| Alpaca crypto quotes / order books | The Dublin collector archives Alpaca US WebSocket quotes, trades, books and minute bars with receipt timestamps. OCaml now receives quotes and bars over a local socket; a separate 5m historical snapshot is labeled with retrieval time. In one capture, 262 closed-minute bars appeared in 285 elapsed minute slots; 23 were missing and were not filled synthetically. | The quote-cross paper rule remains uncalibrated. A stale quote, lost socket event or different venue must not authorize an order. The historical snapshot may include later bar revisions and is descriptive context, not point-in-time backtest evidence. |
 | Pattern Forge | Its public API supplies validated closed Hyperliquid candles for BTC, ETH and SOL. The monitor derives descriptive 5m, 1h and 1d shapes/indicators from them. | Hyperliquid is not Alpaca's execution venue. Its candle patterns and geometric thresholds are uncalibrated; no order is authorized by them. |
 | Alpaca US stocks / ETFs | The Basic market-data plan gives live IEX coverage, not consolidated SIP, and excludes the most recent 15 minutes of historical SIP queries. | Do not treat IEX alone as a full-market execution reference for energy ETFs or AAPL. AAPL is explicitly protected from this bot. |
 | Energy Monitor | Public European electricity/gas observations and a candidate EIA WTI/Brent daily historical source. | These have different units, publication times and underlying markets from any Alpaca ETF. No direct tradable mapping or predictive lag has been validated. |
@@ -117,7 +128,7 @@ licensed, point-in-time statements/corporate-event data. Crypto has no company
 earnings statement analogous to an equity, and energy physical data needs its
 own publication-time audit.
 
-## Decision gate before any new paper order
+## Gate before any live order or predictive claim
 
 1. **Declare the hypothesis and horizon.** Specify the traded Alpaca symbol,
    the venue of each input, the intended holding period, benchmark and decision
@@ -154,10 +165,10 @@ There is **no source-backed universal number of minutes or candles** an AI
 agent should inspect before a trade. The time required is determined by the
 declared horizon and measured data/cost uncertainty. For this project:
 
-- **Scalping:** no trades under the present 30-second polling plus 5-minute
-  candle context. First capture live quotes/books and trade updates, measure
-  latency and spread at the intended venue, and test a cost-aware strategy on
-  timestamped events.
+- **Scalping:** the WebSocket path is active for paper quotes, but only the
+  local receipt-to-decision interval has been sampled. Broker response, fill
+  timing, spread and fees still need a complete, timestamped execution study
+  before calling it a low-latency scalping strategy.
 - **Day trading:** use closed intraday observations, a point-in-time event and
   cost model, multiple out-of-sample days/regimes, and a live shadow run.
   Calendar duration and sample size must be justified by a precision/power
@@ -186,7 +197,7 @@ remote MCP service broader standing execution authority.
 - [Pattern Forge reading rules](https://github.com/coder058/pattern-forge/blob/main/docs/reading-rules.md)
 - Energy Monitor's local EIA source audit (`docs/eia-crude-benchmark-audit-2026-09-26.md` in that separate project) remains unpublished here; its availability and point-in-time suitability still need verification.
 
-The immediate honest risk: the observed paper rule lost money in a tiny sample
-before all fees were reconciled, and its data path is unsuitable for scalping.
-Reactivating it now could produce more losing paper trades and would say little
-about live execution.
+The immediate honest risk: the observed earlier paper sample lost money before
+all fees were reconciled. The now-active paper rule can continue to lose paper
+money within its budget and says little about live execution quality or
+profitability.

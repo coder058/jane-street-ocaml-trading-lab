@@ -2,3 +2,8 @@
  (name paper_crypto_main)
  (modules paper_crypto_main)
  (libraries paper_market yojson unix))
+
+(executable
+ (name stream_probe)
+ (modules stream_probe)
+ (libraries yojson unix))

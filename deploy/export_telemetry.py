@@ -187,11 +187,53 @@ def capture_state(service: dict[str, object]) -> dict[str, object]:
     }
 
 
+def latest_fields(events: list[dict[str, str]], prefix: str) -> dict[str, str] | None:
+    for row in reversed(events):
+        message = row["message"]
+        if message.startswith(prefix):
+            result = {"observedAt": row["at"]}
+            for token in message.split()[1:]:
+                if "=" in token:
+                    key, value = token.split("=", 1)
+                    result[key] = value
+            return result
+    return None
+
+
+def analysis_state(events: list[dict[str, str]]) -> dict[str, object]:
+    latest_five_event = next((row for row in reversed(events) if row["message"].startswith(
+        ("TECHNICAL_5M ", "TECHNICAL_5M_UNAVAILABLE "))), None)
+    five = (latest_fields([latest_five_event], "TECHNICAL_5M ")
+            if latest_five_event is not None else None)
+    decision = latest_fields(events, "HOT_DECISION ")
+    return {
+        "fiveMinute": None if five is None else {
+            "observedAt": five.get("observedAt"),
+            "retrievedAt": five.get("retrieved_at"),
+            "lastBarAt": five.get("last_bar"),
+            "contiguousBars": int(five.get("contiguous_bars", "0")),
+            "trend": five.get("trend", "warming"),
+            "probability": None,
+            "orderAuthority": False,
+        },
+        "lastDecision": None if decision is None else {
+            "observedAt": decision.get("observedAt"),
+            "quoteTime": decision.get("quote_time"),
+            "policy": decision.get("policy"),
+            "receiveToDecisionMs": decision.get("receive_to_decision_ms"),
+            "contextFrame": decision.get("context_frame"),
+            "contextBar": decision.get("context_bar"),
+            "trend": decision.get("trend"),
+        },
+    }
+
+
 def significant_digest(events: list[dict[str, str]], service: dict[str, object],
                        document: dict[str, object]) -> str:
     meaningful = [event for event in events if event["message"].startswith((
         "SEND ", "ACK ", "reconcile ", "HALT ", "DATA_ERROR ",
-        "REJECTED ", "UNCERTAIN ", "start ",
+        "REJECTED ", "UNCERTAIN ", "start ", "TECHNICAL_5M ",
+        "HOT_DECISION ",
     ))]
     orders = [{key: order.get(key) for key in ("id", "status", "filledQty")}
               for order in document["orders"]]
@@ -215,6 +257,7 @@ def snapshot(credentials: dict[str, str], service: dict[str, object],
         "source": "Dublin OCaml paper service",
         "service": service,
         "capture": capture_state(service),
+        "analysis": analysis_state(events),
         "account": {
             "equity": str(account.get("equity", "")),
             "cash": str(account.get("cash", "")),
@@ -266,7 +309,8 @@ def main() -> int:
     if len(body) > 1_048_576:
         raise ValueError("telemetry exceeds the signed endpoint limit")
     if args.dry_run:
-        print(f"telemetry: dry run, mode={service['mode']}, {len(document['positions'])} positions, {len(document['orders'])} orders, {len(document['fills'])} fills, {len(events)} events, complete_orders={document['ordersComplete']}, complete_fills={document['fillsComplete']}, complete_journal={journal_complete}, {len(body)} bytes")
+        five = document["analysis"]["fiveMinute"]
+        print(f"telemetry: dry run, mode={service['mode']}, {len(document['positions'])} positions, {len(document['orders'])} orders, {len(document['fills'])} fills, {len(events)} events, complete_orders={document['ordersComplete']}, complete_fills={document['fillsComplete']}, complete_journal={journal_complete}, five_minute_trend={five['trend'] if five else 'unavailable'}, five_minute_last_bar={five['lastBarAt'] if five else 'unavailable'}, {len(body)} bytes")
         return 0
     private_key = serialization.load_pem_private_key(KEY_PATH.read_bytes(), password=None)
     signature = base64.b64encode(private_key.sign(body)).decode("ascii")

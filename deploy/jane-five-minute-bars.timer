@@ -1,0 +1,14 @@
+[Unit]
+Description=Refresh closed Alpaca BTC/USD 5m context repeatedly
+
+[Timer]
+# GUESS: # UNCALIBRATED GUESS — first refresh one minute after boot to give
+# network and credentials time to become available.
+OnBootSec=1min
+# SOURCE: Alpaca snapshot uses five-minute bars; poll once per bar interval.
+OnUnitActiveSec=5min
+Persistent=true
+Unit=jane-five-minute-bars.service
+
+[Install]
+WantedBy=timers.target

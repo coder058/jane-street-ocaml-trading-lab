@@ -46,6 +46,26 @@ export type PaperTelemetry = {
   source: "Dublin OCaml paper service";
   service: { active: boolean; mode: "MONITOR" | "PAPER_ORDER" | "STOPPED" };
   capture?: { active: boolean; lastEventAt: string | null; bytesToday: number };
+  analysis?: {
+    fiveMinute: {
+      observedAt: string | null;
+      retrievedAt: string | null;
+      lastBarAt: string | null;
+      contiguousBars: number;
+      trend: string;
+      probability: null;
+      orderAuthority: false;
+    } | null;
+    lastDecision: {
+      observedAt: string | null;
+      quoteTime: string | null;
+      policy: string | null;
+      receiveToDecisionMs: string | null;
+      contextFrame: string | null;
+      contextBar: string | null;
+      trend: string | null;
+    } | null;
+  };
   account: { equity: string; cash: string; buyingPower: string };
   positions: PaperPosition[];
   orders: PaperOrder[];

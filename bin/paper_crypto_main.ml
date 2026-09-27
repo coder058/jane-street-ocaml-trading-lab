@@ -12,6 +12,12 @@ let pending_path = Filename.concat state_dir "pending"
 let owned_path = Filename.concat state_dir "owned"
 let buy_budget_path = Filename.concat state_dir "buy-budget"
 let event_path = Filename.concat state_dir "events.jsonl"
+(* GUESS: # UNCALIBRATED GUESS — reject hot quotes older than five seconds
+   before paper submission; calibrate with observed queue and broker delays. *)
+let max_quote_age_ns = 5_000_000_000
+
+let quote_age_ns received_ns =
+  int_of_float (Unix.gettimeofday () *. 1_000_000_000.) - received_ns
 
 let read_line path =
   if not (Sys.file_exists path) then None
@@ -114,7 +120,8 @@ let broker_state () =
       Error ("paper account not tradable: " ^ status)
     else Ok (buying_power, position_qty, has_open_order, tick)
 
-let try_order (previous : Paper_crypto.quote) (current : Paper_crypto.quote) =
+let try_order ?received_ns (previous : Paper_crypto.quote)
+    (current : Paper_crypto.quote) =
   match reconcile_pending () with
   | Error e -> log "HALT %s" e
   | Ok true -> log "HOLD pending order is still open"
@@ -167,6 +174,12 @@ let try_order (previous : Paper_crypto.quote) (current : Paper_crypto.quote) =
                  (position_qty *. current.ask +. notional > 30.) then
                  (* # SOURCE: user specified $30 maximum paper position/order size. *)
                  log "HOLD new buy would exceed user $30 BTC position cap"
+               else if (match received_ns with
+                 | None -> false
+                 | Some received_ns ->
+                   let age = quote_age_ns received_ns in
+                   age < 0 || age > max_quote_age_ns) then
+                 log "HOLD hot quote became stale before paper submission"
                else (
                  let id = client_id side current.timestamp in
                  if side = "buy" then
@@ -234,6 +247,316 @@ let run ~trade ~once =
   in
   loop None
 
+let hot_socket_path = "/home/ubuntu/jsbot-paper-state/alpaca-hot.sock"
+let hot_lock_path = "/home/ubuntu/jsbot-paper-state/alpaca-hot.lock"
+(* GUESS: # UNCALIBRATED GUESS — emit at most one quote journal row per five
+   seconds for the public monitor; hot decisions still inspect every quote. *)
+let quote_log_interval_seconds = 5.
+
+let json_string name json =
+  match Paper_broker.member name json with Some (`String s) -> Some s | _ -> None
+
+let json_int name json =
+  match Paper_broker.member name json with Some (`Int n) -> Some n | _ -> None
+
+let option_number = function
+  | None -> "warming"
+  | Some number -> Printf.sprintf "%.5f" number
+
+let utc_day epoch =
+  let tm = Unix.gmtime epoch in
+  Printf.sprintf "%04d-%02d-%02d" (tm.tm_year + 1900) (tm.tm_mon + 1)
+    tm.tm_mday
+
+let warmup_from_capture () =
+  (* SOURCE: private Alpaca market capture; yesterday is included so a restart
+     near UTC midnight can seed indicators from earlier closed bars. *)
+  let archive_dir = "/home/ubuntu/jsbot-paper-state/market-capture/us" in
+  let now = Unix.time () in
+  let days = [ utc_day (now -. 86_400.); utc_day now ] in
+  let state = ref Technical.empty and last_reading = ref None in
+  try
+    List.iter (fun day ->
+      let path = Filename.concat archive_dir (day ^ ".jsonl") in
+      if Sys.file_exists path then (
+        let input = open_in path in
+        Fun.protect ~finally:(fun () -> close_in_noerr input) (fun () ->
+          try while true do
+            let line = input_line input in
+            let record = Yojson.Safe.from_string line in
+            match Paper_broker.member "event" record with
+            | Some event when json_string "T" event = Some "b" ->
+              (match Technical.parse_bar event with
+               | Error error -> failwith ("archive bar: " ^ error)
+               | Ok bar ->
+                 (match Technical.update !state bar with
+                  | Error error -> failwith ("archive order: " ^ error)
+                  | Ok Technical.Duplicate -> ()
+                  | Ok (Technical.Applied (next, reading)) ->
+                    state := next;
+                    last_reading := Some reading))
+            | _ -> ()
+          done with End_of_file -> ()))) days;
+    !state, !last_reading
+  with error ->
+    log "TECHNICAL_WARMUP_FAILED reason=%s using_live_bars=true"
+      (Printexc.to_string error);
+    Technical.empty, None
+
+let five_minute_snapshot_path =
+  "/home/ubuntu/jsbot-paper-state/five-minute-bars.json"
+
+let load_five_minute_snapshot () =
+  let snapshot = Yojson.Safe.from_file five_minute_snapshot_path in
+  let expected_source =
+    "https://data.alpaca.markets/v1beta3/crypto/us/bars" in
+  (* SOURCE: the local snapshot is written by refresh_five_minute_bars.py
+     from Alpaca US BTC/USD 5Min bars, with a retrieval timestamp. *)
+  if json_string "source" snapshot <> Some expected_source ||
+     json_string "symbol" snapshot <> Some "BTC/USD" ||
+     json_string "timeframe" snapshot <> Some "5Min" then
+    failwith "five-minute snapshot source, symbol, or frame mismatch";
+  let retrieved_at = Option.value (json_string "retrievedAt" snapshot)
+    ~default:"unknown" in
+  let rows = match Paper_broker.member "bars" snapshot with
+    | Some (`List rows) -> rows
+    | _ -> failwith "five-minute snapshot bars absent" in
+  let state = ref Technical.empty and last_reading = ref None in
+  List.iter (fun row ->
+    let event = match row with
+      | `Assoc fields -> `Assoc (("T", `String "b") ::
+        ("S", `String "BTC/USD") :: fields)
+      | _ -> failwith "five-minute snapshot row is not an object" in
+    match Technical.parse_bar event with
+    | Error error -> failwith ("five-minute bar: " ^ error)
+    | Ok bar ->
+      (* SOURCE: a five-minute bar is usable only after its close. *)
+      if bar.minute mod 5 <> 0 ||
+         bar.minute + 5 > int_of_float (Unix.time ()) / 60 then
+        failwith "five-minute bar unaligned or not yet closed";
+      (match Technical.update ~step:5 !state bar with
+       | Error error -> failwith ("five-minute order: " ^ error)
+       | Ok Technical.Duplicate -> ()
+       | Ok (Technical.Applied (next, reading)) ->
+         state := next;
+         last_reading := Some reading)) rows;
+  !state, !last_reading, retrieved_at
+
+let run_hot_stream ~trade =
+  if not (Sys.file_exists state_dir) then Unix.mkdir state_dir 0o700;
+  let armed = trade && Sys.getenv_opt "PAPER_ORDERS" = Some "1" in
+  (* SOURCE: the production order path always uses the collector's fixed
+     socket. A read-only test can choose an isolated fixture socket. *)
+  let socket_path = if armed then hot_socket_path else
+    Option.value (Sys.getenv_opt "HOT_SOCKET_PATH") ~default:hot_socket_path in
+  let lock_path = if socket_path = hot_socket_path then hot_lock_path
+    else socket_path ^ ".lock" in
+  let worker_lock_path = Filename.concat state_dir "order-worker.lock" in
+  log "start mode=%s feed=alpaca_websocket state=%s"
+    (if armed then "PAPER_ORDER" else "MONITOR") state_dir;
+  let lock_fd = Unix.openfile lock_path [ Unix.O_CREAT; Unix.O_RDWR ] 0o600 in
+  Unix.lockf lock_fd Unix.F_LOCK 0;
+  let socket = Unix.socket Unix.PF_UNIX Unix.SOCK_DGRAM 0 in
+  let bound = ref false in
+  Fun.protect ~finally:(fun () ->
+    Unix.close socket;
+    if !bound && Sys.file_exists socket_path then Unix.unlink socket_path;
+    Unix.lockf lock_fd Unix.F_ULOCK 0;
+    Unix.close lock_fd) (fun () ->
+    if Sys.file_exists socket_path then Unix.unlink socket_path;
+    Unix.bind socket (Unix.ADDR_UNIX socket_path);
+    bound := true;
+    Unix.chmod socket_path 0o600;
+    let buffer = Bytes.create 8192 in
+    (* GUESS: # UNCALIBRATED GUESS — 8 KiB holds a compact market quote; any
+       truncation must fail JSON parsing and halt this consumer. *)
+    let active_session = ref None and last_sequence = ref 0 in
+    let previous_quote : Paper_crypto.quote option ref = ref None in
+    let warm_state, warm_reading = warmup_from_capture () in
+    let technical = ref warm_state in
+    let last_reading : Technical.reading option ref = ref warm_reading in
+    log "TECHNICAL_WARMUP contiguous_bars=%d last_bar=%s"
+      warm_state.count
+      (match warm_state.last with None -> "none" | Some bar -> bar.timestamp);
+    let five_mtime = ref 0. in
+    let five_reading : Technical.reading option ref = ref None in
+    let five_retrieved_at = ref "none" in
+    let refresh_five_context () =
+      if Sys.file_exists five_minute_snapshot_path then (
+        let changed = (Unix.stat five_minute_snapshot_path).st_mtime in
+        if changed <> !five_mtime then (
+          five_mtime := changed;
+          try
+            let state, reading, retrieved_at = load_five_minute_snapshot () in
+            five_reading := reading;
+            five_retrieved_at := retrieved_at;
+            let bar_time = match state.last with
+              | None -> "none" | Some bar -> bar.timestamp in
+            let trend = match reading with
+              | None -> "warming" | Some value -> value.trend in
+            log "TECHNICAL_5M venue=Alpaca symbol=BTC/USD retrieved_at=%s contiguous_bars=%d last_bar=%s trend=%s probability=unknown order_authority=false"
+              retrieved_at state.count bar_time trend
+          with error ->
+            five_reading := None;
+            log "TECHNICAL_5M_UNAVAILABLE reason=%s"
+              (Printexc.to_string error))) in
+    refresh_five_context ();
+    let last_reconcile = ref (Unix.gettimeofday ()) in
+    let last_quote_log = ref 0. in
+    let worker_pid = ref None in
+    let reap_worker () =
+      match !worker_pid with
+      | None -> ()
+      | Some pid ->
+        (match Unix.waitpid [ Unix.WNOHANG ] pid with
+         | 0, _ -> ()
+         | _, status ->
+           worker_pid := None;
+           let outcome = match status with
+             | Unix.WEXITED code -> Printf.sprintf "exit=%d" code
+             | Unix.WSIGNALED signal -> Printf.sprintf "signal=%d" signal
+             | Unix.WSTOPPED signal -> Printf.sprintf "stopped=%d" signal in
+           log "HOT_WORKER_FINISHED pid=%d %s" pid outcome) in
+    let spawn_worker label job =
+      reap_worker ();
+      match !worker_pid with
+      | Some pid -> log "HOT_WORKER_BUSY candidate=%s active_pid=%d" label pid
+      | None ->
+        (match Unix.fork () with
+         | 0 ->
+           Unix.close socket;
+           Unix.close lock_fd;
+           let order_fd = Unix.openfile worker_lock_path
+             [ Unix.O_CREAT; Unix.O_RDWR ] 0o600 in
+           Unix.lockf order_fd Unix.F_LOCK 0;
+           (try
+              job ();
+              Unix.lockf order_fd Unix.F_ULOCK 0;
+              Unix.close order_fd;
+              exit 0
+            with error ->
+              prerr_endline ("HOT_WORKER_ERROR " ^ Printexc.to_string error);
+              Unix.close order_fd;
+              exit 1)
+         | pid -> worker_pid := Some pid;
+           log "HOT_WORKER_STARTED candidate=%s pid=%d" label pid) in
+    while true do
+      let length, _ = Unix.recvfrom socket buffer 0 (Bytes.length buffer) [] in
+      let record =
+        try Yojson.Safe.from_string (Bytes.sub_string buffer 0 length)
+        with Yojson.Json_error _ -> failwith "invalid or truncated hot datagram" in
+      let session = Option.value (json_string "sessionId" record) ~default:"" in
+      let sequence = json_int "hotSequence" record in
+      let received_ns = json_int "receivedAtNs" record in
+      let event = Paper_broker.member "event" record in
+      let kind = Option.bind event (json_string "T") |> Option.value ~default:"" in
+      refresh_five_context ();
+      (match sequence, received_ns with
+       | Some sequence, Some received_ns
+         when session <> "" && sequence > 0 && received_ns > 0 ->
+         if !active_session <> Some session then (
+           active_session := Some session;
+           (* The process can attach mid-session; continuity starts with the
+              first observed datagram and all later gaps fail closed. *)
+           last_sequence := sequence - 1;
+           previous_quote := None;
+           last_reading := None;
+           log "HOT_SESSION session=%s first_sequence=%d reset=true" session sequence);
+         if sequence <> !last_sequence + 1 then (
+           log "HALT hot feed sequence gap session=%s expected=%d received=%d"
+             session (!last_sequence + 1) sequence;
+           failwith "hot feed sequence gap");
+         last_sequence := sequence;
+         if kind = "q" then (
+           let age_ns = quote_age_ns received_ns in
+           if age_ns < 0 || age_ns > max_quote_age_ns then (
+             previous_quote := None;
+             log "DATA_STALE hot quote age_ms=%d reset=true" (age_ns / 1_000_000))
+           else
+             match event with
+             | None -> failwith "hot quote event missing"
+             | Some event ->
+               (match Paper_crypto.parse_quote_event event with
+                | Error e -> log "HALT invalid hot quote reason=%s" e; failwith e
+                | Ok current ->
+                  if Unix.gettimeofday () -. !last_quote_log >= quote_log_interval_seconds then (
+                    last_quote_log := Unix.gettimeofday ();
+                    log "QUOTE BTC/USD t=%s bid=%g ask=%g spread_bps=%.4f feed=alpaca_websocket"
+                      current.timestamp current.bid current.ask
+                      (Paper_crypto.spread_bps current));
+                  (match !previous_quote with
+                   | Some previous ->
+                     let candidate = current.bid > previous.ask ||
+                       current.ask < previous.bid in
+                     if candidate then (
+                       let decision_ns = int_of_float (Unix.gettimeofday () *. 1_000_000_000.) in
+                       let context_frame, context_time, context_trend,
+                           context_retrieved =
+                         match !five_reading, !last_reading with
+                         | Some reading, _ ->
+                           "5Min", reading.bar.timestamp, reading.trend,
+                           !five_retrieved_at
+                         | None, Some reading ->
+                           "1Min", reading.bar.timestamp, reading.trend,
+                           "stream"
+                         | None, None -> "none", "none", "warming", "none" in
+                       log "HOT_DECISION quote_time=%s receive_to_decision_ms=%.3f candidate=true policy=quote_cross_v1 context_frame=%s context_bar=%s trend=%s context_retrieved=%s probability=unknown"
+                         current.timestamp
+                         (float_of_int (decision_ns - received_ns) /. 1_000_000.)
+                         context_frame context_time context_trend context_retrieved;
+                       spawn_worker "quote_cross" (fun () ->
+                         let age_ns = quote_age_ns received_ns in
+                         if age_ns < 0 || age_ns > max_quote_age_ns then
+                           log "HOLD stale hot quote before broker work age_ms=%d"
+                             (age_ns / 1_000_000)
+                         else if armed then try_order ~received_ns previous current
+                         else shadow_decision previous current));
+                     previous_quote := Some current
+                   | None ->
+                     previous_quote := Some current;
+                     log "HOT_BASELINE quote_time=%s" current.timestamp)))
+         else if kind = "b" then
+           (match event with
+            | None -> failwith "closed bar event missing"
+            | Some event ->
+              (match Technical.parse_bar event with
+               | Error error -> log "HALT invalid closed bar reason=%s" error; failwith error
+               | Ok bar ->
+                 (match Technical.update !technical bar with
+                  | Error error -> log "HALT closed bar sequence reason=%s" error; failwith error
+                  | Ok Technical.Duplicate ->
+                    log "BAR_DUPLICATE t=%s ignored=true" bar.timestamp
+                  | Ok (Technical.Applied (next, reading)) ->
+                    technical := next;
+                    last_reading := Some reading;
+                    log "TECHNICAL venue=Alpaca symbol=BTC/USD bar=%s count=%d gap_reset=%b trend=%s ema20=%s ema50=%s rsi14=%s macd=%s macd_signal=%s patterns=%s probability=unknown order_authority=false"
+                      bar.timestamp reading.count reading.gap_reset reading.trend
+                      (option_number reading.ema_fast)
+                      (option_number reading.ema_slow)
+                      (option_number reading.rsi)
+                      (option_number reading.macd)
+                      (option_number reading.macd_signal)
+                      (if reading.patterns = [] then "none" else
+                         String.concat "," reading.patterns))))
+         else if kind = "u" then
+           (match event with
+            | Some event ->
+              log "BAR_REVISION t=%s ignored_for_decision=true"
+                (Option.value (json_string "t" event) ~default:"unknown")
+            | None -> failwith "updated bar event missing")
+         else
+           (log "HALT unexpected hot event type=%s" kind;
+            failwith "unexpected hot event type");
+         if Unix.gettimeofday () -. !last_reconcile >= 30. then (
+           last_reconcile := Unix.gettimeofday ();
+           if read_line pending_path <> None then
+             spawn_worker "reconcile" (fun () ->
+               match reconcile_pending () with
+               | Ok _ -> ()
+               | Error e -> log "HALT pending reconciliation: %s" e))
+       | _ -> failwith "hot datagram missing session, sequence, or receipt time")
+    done)
+
 let research_once () =
   List.iter (fun symbol ->
     match Pattern_forge.fetch symbol with
@@ -252,12 +575,14 @@ let research_once () =
 
 let () =
   let trade = ref false and once = ref false and check_broker = ref false in
+  let hot_stream = ref false in
   let check_positions = ref false in
   let research = ref false in
   let check_order = ref None in
   Arg.parse [
     "--paper", Arg.Set trade, "Allow paper orders only with PAPER_ORDERS=1";
     "--once", Arg.Set once, "Fetch one live quote and exit";
+    "--hot-stream", Arg.Set hot_stream, "Consume the local Alpaca WebSocket datagram feed";
     "--check-broker", Arg.Set check_broker, "Read paper account, orders, position and asset";
     "--check-positions", Arg.Set check_positions, "Read paper positions without trading";
     "--research-once", Arg.Set research, "Read Pattern Forge closed-candle context without trading";
@@ -296,4 +621,5 @@ let () =
     | Ok (buying_power, qty, open_order, tick) ->
       Printf.printf "BROKER_CHECK_OK paper buying_power=%.2f btc_qty=%.9f open_orders=%b price_increment=%g\n"
         buying_power qty open_order tick
+  else if !hot_stream then run_hot_stream ~trade:!trade
   else run ~trade:!trade ~once:!once

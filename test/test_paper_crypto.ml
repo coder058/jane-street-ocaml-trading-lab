@@ -28,6 +28,12 @@ let () =
   let payload = Yojson.Safe.from_string
     {|{"quotes":{"BTC/USD":{"bp":100.0,"ap":101.0,"bs":1.0,"as":2.0,"t":"2026-09-27T01:00:00Z"}}}|} in
   check (Result.is_ok (Paper_crypto.parse_quote payload)) "quote parse";
+  let quote_event = Yojson.Safe.from_string
+    {|{"T":"q","S":"BTC/USD","bp":100.0,"ap":101.0,"bs":1.0,"as":2.0,"t":"2026-09-27T01:00:00Z"}|} in
+  check (Result.is_ok (Paper_crypto.parse_quote_event quote_event)) "live quote event parse";
+  let wrong_symbol = Yojson.Safe.from_string
+    {|{"T":"q","S":"ETH/USD","bp":100.0,"ap":101.0,"bs":1.0,"as":2.0,"t":"2026-09-27T01:00:00Z"}|} in
+  check (Result.is_error (Paper_crypto.parse_quote_event wrong_symbol)) "live quote event symbol guard";
   let body, code = Alpaca_http.split_status "{\"ok\":true}\n__HTTP_STATUS__:200\n" in
   check (code = 200 && body = "{\"ok\":true}") "HTTP status with trailing newline";
   print_endline "paper crypto policy checks passed"
