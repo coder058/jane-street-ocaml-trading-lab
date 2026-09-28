@@ -400,6 +400,39 @@ microestructura, ejecución y modelos; la rentabilidad puede seguir sin aparecer
   prueba de cruce entre ficheros diarios pasó. El monitor CI completó con éxito;
   ambos jobs de GitHub Actions completaron con éxito a las 09:48:21 UTC.
 
+## Actualización de evidencia — 28 de septiembre, 10:10 UTC
+
+- La auditoría completa actual registró 257 órdenes y 422 fills BTC del bot.
+  Compras por $4.246,982078 frente a ventas por $4.236,121736 dan −$10,860342
+  de flujo bruto antes de fees. No había BTC abierta. La cuenta tiene además
+  10 acciones AAPL protegidas (valor $3.404,40 y P&L no realizado $1.457), que
+  no pertenecen al bot. El equity de $101.434,50 no permite atribuir el P&L.
+  `FEE`/`CFEE` devolvieron cero filas; falta reconciliar fees y ledger neto.
+- El auditor exacto de pares cotizados enlazó 232 decisiones `HOT_SAMPLE`;
+  102 órdenes acabaron `filled` y 130 `canceled`. La mediana del movimiento
+  que activa la regla fue 1,510731 bps. Un análisis posterior de 389 fills en
+  174 órdenes obtuvo respuestas direccionales medianas de +0,020714 bps,
+  +0,040841 bps y +0,136072 bps en horizontes nominales de 1/5/30s. La
+  cotización usada llegó tarde: mediana 2,600/3,028/3,015s tras cada objetivo
+  y máximos de 84,964/80,964/75,940s. Se descarta interpretarlo como alpha;
+  no incluye las actividades de fees y no es un backtest ejecutable.
+- La evaluación cronológica read-only de Markov tiene 175 etiquetas forward:
+  Brier 0,250335 contra 0,249947 del baseline constante congelado. El modelo
+  no superó el baseline en esta muestra. Cero retornos de midpoint superaron
+  el obstáculo nominal de 50 bps ida y vuelta por fee solamente. La muestra es
+  corta y dependiente, y no usa bid/ask ni simula órdenes.
+- La captura HIP-3 recibió 831.795 BBO y 86.816 actualizaciones de velas en
+  14 contratos seleccionados; cada uno apareció en `allMids`. `xyz:EUR`
+  emitió 152 actualizaciones de vela y `xyz:GBP` 26, evidencia de que no hay
+  continuidad garantizada de velas por ese canal. El colector no tiene ruta de
+  órdenes. Los 0 huecos de secuencia local solo se refieren a lo escrito.
+- La política `quote_cross_30s_v1`, los límites paper y la arquitectura de
+  solo lectura HIP-3 siguen sin cambios. La evaluación Markov no autoriza
+  órdenes y los datos actuales no justifican llamar al sistema HFT ni cambiar
+  tamaños. El auditor local pasó 24 pruebas; el commit anterior `e68e341`
+  pasó GitHub Actions. La nueva auditoría de markout está en trabajo local,
+  aún sin commit.
+
 ## Fuentes técnicas verificadas
 
 - [Alpaca: límites de la simulación paper](https://docs.alpaca.markets/us/docs/paper-trading).

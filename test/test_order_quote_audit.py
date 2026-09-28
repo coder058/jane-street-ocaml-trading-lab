@@ -10,7 +10,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "research"))
 
-from order_quote_audit import audit  # noqa: E402
+from order_quote_audit import _as_epoch_ns, audit  # noqa: E402
 
 
 class OrderQuoteAuditTests(unittest.TestCase):
@@ -77,6 +77,55 @@ class OrderQuoteAuditTests(unittest.TestCase):
 
         self.assertEqual(result["matchedHotOrders"], 1)
         self.assertEqual(result["unmatchedHotOrderIds"], [])
+
+    def test_fill_midpoint_response_uses_first_quote_after_each_horizon(self) -> None:
+        # SOURCE: synthetic quote/fill times exercise forward-only 1s/5s/30s
+        # sampling; the horizons are descriptive, not trading parameters.
+        prior = "2026-09-27T00:00:00Z"
+        decision_time = "2026-09-27T00:00:01Z"
+        client_id = "jsbotbtcbuy20260927T000001Z"
+        with tempfile.TemporaryDirectory() as temporary:
+            capture = Path(temporary) / "capture.jsonl"
+            journal = Path(temporary) / "events.jsonl"
+            quotes = [
+                (prior, 99, 100),
+                (decision_time, 101, 102),
+                ("2026-09-27T00:00:02.3Z", 102, 104),
+                ("2026-09-27T00:00:07Z", 103, 105),
+            ]
+            capture.write_text("\n".join(json.dumps({"event": {
+                "T": "q", "S": "BTC/USD", "t": at, "bp": bid, "ap": ask,
+            }}) for at, bid, ask in quotes), encoding="utf-8")
+            journal.write_text("\n".join(json.dumps({"at": decision_time, "message": message})
+                for message in [
+                    f"HOT_SAMPLE reference_quote_time={prior} quote_time={decision_time} candidate=true policy=quote_cross_30s_v1",
+                    f"SEND paper buy BTC/USD qty=1 limit=102 id={client_id}",
+                ]), encoding="utf-8")
+            result = audit(capture, journal, {
+                "ordersComplete": True, "fillsComplete": True,
+                "orders": [{"id": "order", "clientOrderId": client_id,
+                    "status": "filled", "qty": "1", "filledQty": "1",
+                    "filledAvgPrice": "102"}],
+                "fills": [{"orderId": "order", "clientOrderId": client_id,
+                    "side": "buy", "qty": "1", "price": "102",
+                    "transactionTime": "2026-09-27T00:00:01.3Z"}],
+            })
+
+        response = result["fillMidpointResponse"]
+        self.assertTrue(response["available"])
+        self.assertEqual(response["hotOrderFills"], 1)
+        self.assertAlmostEqual(response["byHorizon"]["1s"]["medianSignedMidpointResponseBps"],
+                               ((103 / 102) - 1) * 10_000)
+        self.assertAlmostEqual(response["byHorizon"]["5s"]["medianSignedMidpointResponseBps"],
+                               ((104 / 102) - 1) * 10_000)
+        self.assertAlmostEqual(response["byHorizon"]["5s"]["medianQuoteDelayAfterHorizonMs"],
+                               700)
+        self.assertEqual(response["byHorizon"]["30s"]["fillsWithoutFutureQuote"], 1)
+
+    def test_nanosecond_timestamps_are_compared_without_losing_fraction(self) -> None:
+        first = _as_epoch_ns("2026-09-27T07:28:07.833016531+00:00")
+        second = _as_epoch_ns("2026-09-27T07:28:07.833016532Z")
+        self.assertEqual(second - first, 1)
 
 
 if __name__ == "__main__":

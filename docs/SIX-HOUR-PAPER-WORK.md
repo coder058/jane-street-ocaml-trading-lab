@@ -331,28 +331,79 @@ Codex follow-ups. This file is the handoff for the scheduled follow-up loop.
   $60 before cancellation of the remainder. These broker outcomes do not
   validate the strategy.
 
+## 10:10 UTC follow-up (28 September)
+
+- The OCaml paper service, Alpaca capture, Hyperliquid capture, one-minute
+  multi-timeframe shadow timer and Markov shadow timer were active. The paper
+  service had zero systemd restarts; the durable pending-order journal was
+  absent. The multi-timeframe output was current through 10:10 UTC. It is a
+  read-only candle summary, not a multi-asset trading model.
+- The current Alpaca read-only snapshot had complete order and fill pagination
+  and an incomplete 4,000-line public journal. The bot had 257 BTC orders and
+  422 fills (187 buy, 235 sell). Buy notional was $4,246.982078 and sell
+  notional $4,236.121736, a gross cash-flow difference of −$10.860342 before
+  any fee reconciliation. No BTC position was open. The account separately
+  held 10 protected AAPL shares marked at $3,404.40 with $1,457 unrealized
+  gain; those shares are not attributable to this bot. Account equity was
+  $101,434.50 and cash $98,030.10, so neither whole-account change can be
+  presented as bot P&L. FEE and CFEE returned zero first-page rows; that does
+  not establish that every economic execution cost is zero. Bot net P&L stays
+  unverified.
+- The exact-quote audit now matches 232/232 `HOT_SAMPLE` order traces, with
+  102 filled and 130 canceled; 25 earlier bot orders still have no such trace.
+  Crossing magnitudes ranged from 0.011831 to 12.000184 bps, with a 1.510731
+  bps median. This describes the trigger, not a return.
+- A new descriptive fill-to-midpoint audit aligned the 389 fills belonging
+  to matched hot orders into 174 order-level responses. Median signed response
+  relative to fill price was +0.020714 bps at the nominal 1s horizon,
+  +0.040841 bps at 5s and +0.136072 bps at 30s; positive-order shares were
+  51.15%, 52.30% and 51.15%. But the first quote after each target arrived a
+  median 2.600s, 3.028s and 3.015s late, with maxima of 84.964s, 80.964s and
+  75.940s. These are not exact horizon markouts, omit activity fees and are
+  not an edge or a profitability estimate. The figures are too small and
+  delayed to justify a rule change.
+- The frozen, read-only Markov shadow had 176 predictions, 175 scored and one
+  not yet labeled. Its forward Brier score was 0.250335 versus 0.249947 for
+  the frozen constant base-rate baseline; it did not improve that baseline
+  on this serially dependent sample. The recorded next-midpoint moves had
+  zero instances above the fee-only 50 bps round-trip hurdle. Prediction lead
+  time had a 293.526s median and ranged from 3.526s to 299.495s. These labels
+  still ignore executable bid/ask and costs; Markov has no order authority.
+- Hyperliquid's current UTC-day health scan read 5 sessions, 831,795 BBO
+  updates, 86,816 candle updates and 7,282 `allMids` updates across 126
+  observed mid names. All 14 selected HIP-3 contracts appeared; there were
+  zero locally recorded sequence gaps and corrupt lines, plus one expected
+  still-open gzip file. The event-driven candle feed was sparse for
+  `xyz:EUR` (152 updates) and `xyz:GBP` (26), so those counts do not establish
+  complete one-minute bars or ten FX pairs. The collector remains read-only.
+- Local Python research tests pass 24/24; the `e68e341` GitHub Actions run
+  passed. The markout implementation preserves nine-digit Alpaca timestamps
+  and now exposes quote delay so an observation arriving long after its target
+  cannot be mistaken for an exact horizon. These working changes are not yet
+  committed.
+
 ## Next verified steps
 
-1. Commit/push the multi-day audit fix and wait for all CI jobs to finish; the
-   deployed UI, live OCaml trace and exact order-to-quote join are now verified.
-2. Reconcile all bot fills with Alpaca `CFEE`/`FEE` activities when posted;
-   distinguish gross filled cash flow, open inventory and actual net P&L.
-3. Continue the order-to-quote audit with order timings, decision quote age,
-   spread and subsequent fills. Measure results by rule and preserve all
-   attempted policy variants in the research log. The exact quote-pair and
-   status join is already implemented for the WebSocket path.
-4. Evaluate Murphy-style trend and candle shapes at a declared horizon, with
-   a Markov transition model and a chronological forward test that has not
-   been used for model selection. Include bid/ask and the actual fee tier.
-   First verify that the new aligned REST timer keeps roughly five minutes of
-   lead, then compare it with timely as-received stream bars and measure gaps
-   and revisions. Exclude old short-lead samples from any full-horizon score.
-5. Run any candidate in shadow mode first. Give it paper order authority only
-   if measured evidence, broker reconciliation and safety checks support the
-   change. Do not activate the user-requested $50/$500 probability tiers from
-   raw, uncalibrated frequencies.
-6. Update the monitor with broker-backed result and the exact policy that
-   authorized each order. Test, commit, deploy and verify every change.
+1. Commit/push the nanosecond-safe quote-response audit and this evidence log;
+   wait for CI. Keep the public response fields explicitly labeled as delayed,
+   fee-excluding diagnostics if they are ever added to the monitor.
+2. Reconcile the bot's full BTC inventory and cash flow from its first order,
+   Alpaca activity pages and any asset-denominated fees; explain AAPL as a
+   separate protected account holding. Do not infer P&L from account equity.
+3. Measure decision-to-submit time, quote age, spread, partial-fill timing and
+   quote delay around each response. Improve the markout only when the capture
+   supports the exact sampling window; retain skipped/stale observations.
+4. Keep the current Markov and candle policies in read-only shadow. The latest
+   Markov sample is slightly worse than its constant baseline. Collect more
+   as-received point-in-time labels and evaluate calibration, bid/ask outcomes,
+   spread, fee records and missing/stale bars before proposing an alternative.
+5. For HIP-3, validate contract metadata, event-driven candle gaps and
+   per-symbol quote freshness/spread. Do not present capture volume as
+   simultaneous tradability or HFT latency. Replay must be deterministic
+   before any testnet execution adapter is considered.
+6. Update the monitor only with complete broker-backed rows, explicit
+   attribution and the policy/version behind each order. Do not promote a
+   candidate or alter order sizing based on these inconclusive results.
 
 Keep the hardcoded paper endpoint, AAPL protection, durable pending journal,
 $100 baseline and $500 BTC exposure ceiling. Paper fills do not establish a
