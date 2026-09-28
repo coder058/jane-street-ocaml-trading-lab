@@ -392,8 +392,33 @@ Codex follow-ups. This file is the handoff for the scheduled follow-up loop.
 - Local Python research tests pass 24/24; the `e68e341` GitHub Actions run
   passed. The markout implementation preserves nine-digit Alpaca timestamps
   and now exposes quote delay so an observation arriving long after its target
-  cannot be mistaken for an exact horizon. These working changes are not yet
-  committed.
+  cannot be mistaken for an exact horizon. The changes were later committed
+  as `c88e3c0` and passed GitHub Actions.
+
+## 10:29 UTC follow-up (28 September)
+
+- Commits `c88e3c0` (post-fill midpoint response audit) and `c147b25` (fee
+  timing/quantity evidence) were pushed to `main`. GitHub Actions completed
+  successfully for both. The 24 Python tests pass; the last commit only changed
+  documentation.
+- A fresh broker snapshot at 10:28:45 UTC had complete order/fill pages, no
+  broker-open orders and no durable pending file. A just-submitted sell order
+  at 10:28:03 for 0.000843881 BTC had filled 0.000187863 BTC across 2 fills
+  ($15.55 at $82,763.21 average) and the remainder was canceled. The bot now
+  holds 0.000656018 BTC marked at $54.30; this is a partial exit, not a flat
+  position. The service remained active with zero restarts.
+- The public signed snapshot at 10:28:50 UTC reflects the same partial exit:
+  199 bot orders with fills, 435 bot fill rows, current BTC mark $54.30, and
+  indicative bot cash-plus-mark −$11.10. Closed-trade net P&L remains
+  unverified. The selected order inspector now visibly shows its earlier and
+  current bid/ask ($82,793.25/$82,815.60 and $82,759.97/$82,778.30), 1.805 bps
+  downward trigger, 8.971 ms receive-to-decision time, 2 broker fills and the
+  partial-cancel outcome. This verifies the public monitor's latest order
+  explanation; it does not validate expected returns.
+- The telemetry exporter uploaded 262 account orders and 438 account fills;
+  the public bot-only view shows fewer because it filters to BTC bot activity.
+  The AAPL holding stays separated and protected. The paper policy, $100
+  baseline, $500 BTC cap and hardcoded paper endpoint remain unchanged.
 
 ## Next verified steps
 

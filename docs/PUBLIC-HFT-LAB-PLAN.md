@@ -438,9 +438,25 @@ microestructura, ejecución y modelos; la rentabilidad puede seguir sin aparecer
 - La política `quote_cross_30s_v1`, los límites paper y la arquitectura de
   solo lectura HIP-3 siguen sin cambios. La evaluación Markov no autoriza
   órdenes y los datos actuales no justifican llamar al sistema HFT ni cambiar
-  tamaños. El auditor local pasó 24 pruebas; el commit anterior `e68e341`
-  pasó GitHub Actions. La nueva auditoría de markout está en trabajo local,
-  aún sin commit.
+  tamaños. El auditor local pasó 24 pruebas; `e68e341` pasó GitHub Actions.
+  La auditoría de markout se publicó después como `c88e3c0`.
+
+## Estado operativo — 28 de septiembre, 10:29 UTC
+
+- `c88e3c0` y `c147b25` ya están en `main`; monitor tests/typecheck/build,
+  Dune build y suite OCaml pasaron en CI. El working tree quedó limpio.
+- Snapshot firmado de 10:28:50 UTC: 199 órdenes BTC del bot con ejecución,
+  435 fills y posición larga abierta de 0,000656018 BTC (marca $54,30). El
+  flujo más inventario mostraba −$11,10 indicativo; el P&L neto cerrado sigue
+  sin reconciliar.
+- La venta de 10:28:03 se ejecutó parcialmente (0,000187863 BTC; 2 fills) y
+  se canceló el resto. El broker no tenía órdenes abiertas, no quedaba diario
+  durable pendiente y el servicio paper seguía activo sin reinicios.
+- El inspector público mostró para esa orden quotes exactas, cruce bajista de
+  1,805 bps, 8,971 ms de decisión, fills parciales y cancelación del remanente.
+  El mercado de órdenes y las razones ya son visibles, aunque el balance sigue
+  correctamente etiquetado como indicativo. La regla activa solo opera BTC en
+  Alpaca paper; los 14 contratos HIP-3 continúan en captura read-only.
 
 ## Fuentes técnicas verificadas
 
