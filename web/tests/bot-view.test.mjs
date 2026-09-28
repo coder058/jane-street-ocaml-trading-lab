@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { botAccounting, botExecutions, decisionForOrder, orderDisplayStatus, orderFillSummary,
-  reasonForOrder } from "../lib/bot-view.ts";
+  quoteEvidence, reasonForOrder } from "../lib/bot-view.ts";
 
 // SOURCE: synthetic values test accounting guards and partial-fill display only.
 const snapshot = () => ({
@@ -54,7 +54,20 @@ test("decision links by encoded quote time, not nearest journal row", () => {
     { message: "HOT_DECISION quote_time=2026-09-27T00:00:01Z policy=wrong" },
   ]);
   assert.equal(decision.policy, "quote_cross_30s_v1");
-  assert.equal(reasonForOrder(order, decision), "Current bid crossed above the earlier sampled ask.");
+  assert.equal(reasonForOrder(order, decision), "Buy trigger: the current bid crossed above the earlier sampled ask.");
   assert.equal(decisionForOrder(order, [], { one: { policy: "stored", quote_time: "old" } }).policy,
     "stored");
+});
+
+test("quote trigger evidence is visible only when the actual quote fields were retained", () => {
+  // SOURCE: synthetic quote values chosen to encode an exact 10 bp upward cross.
+  const evidence = quoteEvidence({ reference_bid: "99.5", reference_ask: "100",
+    current_bid: "100.1", current_ask: "100.2", cross_direction: "up",
+    trigger_move_bps: "10.00000000" });
+  assert.deepEqual(evidence, { referenceBid: 99.5, referenceAsk: 100, currentBid: 100.1,
+    currentAsk: 100.2, triggerMoveBps: 10, direction: "up" });
+  assert.equal(quoteEvidence({ policy: "quote_cross_30s_v1" }), null);
+  assert.equal(quoteEvidence({ reference_bid: "NaN", reference_ask: "100",
+    current_bid: "100.1", current_ask: "100.2", cross_direction: "up",
+    trigger_move_bps: "10" }), null);
 });

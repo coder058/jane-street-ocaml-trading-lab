@@ -13,6 +13,12 @@ shows actual paper orders, the pre-existing AAPL position, feed health, and
 Pattern Forge closed-candle context. The paper account's equity includes AAPL
 and is **not** a performance result for this bot.
 
+A second, read-only collector records public Hyperliquid HIP-3 prices, BBOs and
+1m candle updates for selected FX-like, index, energy and equity contracts.
+It cannot access a wallet or submit orders. Its capture and restart behavior
+are documented in [the Hyperliquid feed runbook](docs/HYPERLIQUID-CAPTURE.md).
+This is market-data collection, not a claim that the OCaml executor is HFT.
+
 ## Current behavior
 
 - The Dublin collector archives Alpaca US BTC/USD WebSocket quotes, trades,
@@ -27,11 +33,12 @@ and is **not** a performance result for this bot.
   selected Pattern Forge shapes and EMA trends once per minute for the research
   watchlist. It has no broker credentials or order path; gaps prevent a frame
   from being manufactured or a trend from being calculated prematurely.
-- The OCaml service is running in `PAPER_ORDER` mode with `PAPER_ORDERS=1` on
-  Dublin as of 27 September 2026. It receives each quote and evaluates the
-  cross-spread rule against a reference quote sampled at the earlier REST
-  service's 30-second cadence. It records each sample and starts a separate
-  worker for broker I/O on candidates so the feed
+- The OCaml service was verified in `PAPER_ORDER` mode with `PAPER_ORDERS=1`
+  on Dublin on 28 September 2026. The monitor is the freshest operational
+  snapshot; any service check is only a point-in-time observation. It receives
+  each quote and evaluates the cross-spread rule against a reference quote
+  sampled at the earlier REST service's 30-second cadence. It records each
+  sample and starts a separate worker for broker I/O on candidates so the feed
   receiver can continue. A deliberately simple, **uncalibrated** cross-spread
   price-move rule submits IOC limits only to the Alpaca **paper** origin.
 - OCaml describes Alpaca closed-minute bars with selected Pattern Forge style
@@ -53,6 +60,9 @@ and is **not** a performance result for this bot.
 - Credentials are sent to `curl` through standard input rather than argv;
   credential variables are stripped from the child process environment.
 - An append-only local journal records quotes, decisions and broker responses.
+  New quote-cross decision events retain both bid/ask pairs and the exact
+  trigger direction/margin; older orders without those fields are not
+  reconstructed or presented as if their prices had been retained.
 - `--research-once` reads closed BTC, ETH and SOL candles from Pattern Forge
   for descriptive 5m, 1h and 1d context. This path cannot authorize orders.
 - Raw captures stay on Dublin; the public monitor receives signed summaries,
@@ -82,8 +92,10 @@ the same new order and fill in its 13:46:30 UTC snapshot. In this one cycle,
 local receipt-to-decision was 7.409 ms, receipt-to-HTTP 1,302.796 ms, and the
 HTTP round trip 316.036 ms. These are distinct measurements, not a latency
 distribution or live-trading result. Pattern Forge and Energy Monitor remain descriptive context in
-their own domains. See [the live-paper runbook](docs/LIVE-PAPER.md) and
-[the evidence and strategy limits](docs/pretrade-evidence.md).
+their own domains. See [the live-paper runbook](docs/LIVE-PAPER.md),
+[the evidence and strategy limits](docs/pretrade-evidence.md), and the
+[public HFT-lab plan](docs/PUBLIC-HFT-LAB-PLAN.md). The plan marks future work
+and acceptance gates; it does not claim unbuilt steps are implemented.
 
 ## Build and test
 

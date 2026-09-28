@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { botAccounting, botExecutions, botFills, botOrders, decisionForOrder, orderDisplayStatus,
-  orderFillSummary, reasonForOrder } from "@/lib/bot-view";
+  orderFillSummary, quoteEvidence, reasonForOrder } from "@/lib/bot-view";
 import type { MarketResearch, PaperFill, PaperOrder, PaperTelemetry } from "@/lib/telemetry";
 
 type Live = { generatedAt: string; telemetry: PaperTelemetry | null };
@@ -87,6 +87,7 @@ function OrderInspector({ order, fills, telemetry }: { order: PaperOrder | undef
   if (!order) return <div className="inspect-empty">No bot order appears in this broker snapshot.</div>;
   const executed = orderFillSummary(order, fills);
   const decision = decisionForOrder(order, telemetry.journal, telemetry.decisionHistory);
+  const quote = quoteEvidence(decision);
   const evidence = telemetry.journal.filter((event) => event.message.includes(order.clientOrderId)
     && /^(SEND|ACK|reconcile) /.test(event.message)).slice(-3);
   return <div className="inspector-body">
@@ -106,8 +107,18 @@ function OrderInspector({ order, fills, telemetry }: { order: PaperOrder | undef
         <div><dt>Earlier quote</dt><dd>{fullTime(decision?.reference_quote_time)}</dd></div>
         <div><dt>Quote time</dt><dd>{fullTime(decision?.quote_time)}</dd></div>
         <div><dt>Decision latency</dt><dd>{decision?.receive_to_decision_ms ? `${decision.receive_to_decision_ms} ms` : "—"}</dd></div>
+        {quote && <>
+          <div><dt>Earlier bid / ask</dt><dd>{money(quote.referenceBid)} / {money(quote.referenceAsk)}</dd></div>
+          <div><dt>Decision bid / ask</dt><dd>{money(quote.currentBid)} / {money(quote.currentAsk)}</dd></div>
+          {/* SOURCE: three decimals keep the displayed trigger margin readable; the stored value keeps eight. */}
+          <div><dt>Cross trigger</dt><dd>{quote.direction} · {quote.triggerMoveBps.toFixed(3)} bps</dd></div>
+        </>}
         <div><dt>Trend context</dt><dd>{decision?.trend ?? "—"} · descriptive only</dd></div></dl>
-      <small>The quote cross authorized this order. Candles and Markov probabilities did not. Historical quote prices were not retained in this decision record.</small>
+      <small>{quote
+        ? "These are the recorded quotes used by the trigger. Trend is descriptive; no calibrated Markov win probability authorized the order."
+        : decision
+          ? "This older decision has no retained quote prices, so its exact trigger margin cannot be reconstructed. Trend is descriptive; no calibrated win probability was used."
+          : "No matching decision record is available for this order; its individual trigger cannot be verified from the retained journal."}</small>
     </div>
     <div className="event-trace"><span className="mini-label">BROKER TRACE</span>
       {evidence.length ? evidence.map((event) => <p key={`${event.at}-${event.message}`}><time>{clock(event.at)}</time>

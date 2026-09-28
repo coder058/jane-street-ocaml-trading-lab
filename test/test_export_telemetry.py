@@ -32,6 +32,7 @@ class DecisionHistoryTests(unittest.TestCase):
             self.assertFalse(projection["orderAuthority"])
 
     def test_old_decision_is_joined_without_nearest_event_guess(self) -> None:
+        # SOURCE: synthetic quote values chosen to encode an exact 10 bp upward cross.
         events = [
             {"at": "2026-09-27T00:00:00Z", "message":
              "HOT_SAMPLE reference_quote_time=2026-09-26T23:59:30Z "
@@ -40,7 +41,9 @@ class DecisionHistoryTests(unittest.TestCase):
             {"at": "2026-09-27T00:00:00Z", "message":
              "HOT_DECISION quote_time=2026-09-27T00:00:00Z "
              "receive_to_decision_ms=5.3 candidate=true "
-             "policy=quote_cross_30s_v1 trend=falling probability=unknown"},
+             "policy=quote_cross_30s_v1 trend=falling probability=unknown "
+             "reference_bid=99.5 reference_ask=100 current_bid=100.1 "
+             "current_ask=100.2 cross_direction=up trigger_move_bps=10.00000000"},
             {"at": "2026-09-27T00:00:01Z", "message":
              "HOT_DECISION quote_time=2026-09-27T00:00:01Z policy=other"},
         ]
@@ -53,6 +56,10 @@ class DecisionHistoryTests(unittest.TestCase):
         self.assertEqual(history["one"]["reference_quote_time"],
                          "2026-09-26T23:59:30Z")
         self.assertEqual(history["one"]["receive_to_decision_ms"], "5.3")
+        self.assertEqual(history["one"]["reference_bid"], "99.5")
+        self.assertEqual(history["one"]["current_ask"], "100.2")
+        self.assertEqual(history["one"]["cross_direction"], "up")
+        self.assertEqual(history["one"]["trigger_move_bps"], "10.00000000")
         self.assertNotIn("other", str(history))
 
 

@@ -112,6 +112,12 @@ let parse_utc_minute timestamp =
         else Some (int_of_float seconds / 60)
   with _ -> None
 
+let is_btc_bar_event event =
+  (* SOURCE: the shared archive includes research symbols; this OCaml indicator
+     state is intentionally scoped to Alpaca BTC/USD. *)
+  string (field "T" event) = Some "b" &&
+  string (field "S" event) = Some "BTC/USD"
+
 let parse_bar event =
   match string (field "T" event), string (field "S" event),
         string (field "t" event), number (field "o" event),

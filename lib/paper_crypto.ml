@@ -64,6 +64,15 @@ let midpoint q = (q.bid +. q.ask) /. 2.
 let spread_bps q = (q.ask -. q.bid) /. midpoint q *. 10_000.
 (* # SOURCE: one basis point is 1/10,000, by definition. *)
 
+let quote_cross_evidence ~previous ~current =
+  (* # SOURCE: quote_cross_30s_v1 triggers on current bid > prior ask (up)
+     or current ask < prior bid (down); express the observed gap in basis points. *)
+  if current.bid > previous.ask then
+    Some ("up", ((current.bid /. previous.ask) -. 1.) *. 10_000.)
+  else if current.ask < previous.bid then
+    Some ("down", ((previous.bid /. current.ask) -. 1.) *. 10_000.)
+  else None
+
 (* # SOURCE: the earlier paper REST loop sampled quotes every 30 seconds;
    reuse that cadence on the WebSocket, without treating it as a calibrated edge. *)
 let sample_interval_ns = 30_000_000_000

@@ -183,7 +183,9 @@ def decision_history(events: list[dict[str, str]],
         if message.startswith("HOT_DECISION "):
             decisions[suffix] = {key: fields[key] for key in (
                 "quote_time", "policy", "receive_to_decision_ms", "trend",
-                "context_frame", "context_bar", "probability") if key in fields}
+                "context_frame", "context_bar", "probability", "reference_bid",
+                "reference_ask", "current_bid", "current_ask", "cross_direction",
+                "trigger_move_bps") if key in fields}
         else:
             samples[suffix] = {key: fields[key] for key in (
                 "reference_quote_time", "window_ms", "candidate") if key in fields}

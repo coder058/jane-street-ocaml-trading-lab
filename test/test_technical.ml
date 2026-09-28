@@ -23,6 +23,11 @@ let applied state bar =
   | Error error -> failwith error
 
 let () =
+  let non_strategy_bar = `Assoc ["T", `String "b"; "S", `String "ETH/USD"] in
+  check (Technical.is_btc_bar_event (event 4 100. 100. 100. 100.))
+    "BTC archive warmup includes strategy symbol";
+  check (not (Technical.is_btc_bar_event non_strategy_bar))
+    "BTC archive warmup skips research symbols";
   let flat = ref Technical.empty in
   let last = ref None in
   (* SOURCE: Pattern Forge needs 50 closed bars to seed its slow EMA. *)

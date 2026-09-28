@@ -270,7 +270,7 @@ let warmup_from_capture () =
             let line = input_line input in
             let record = Yojson.Safe.from_string line in
             match Paper_broker.member "event" record with
-            | Some event when json_string "T" event = Some "b" ->
+            | Some event when Technical.is_btc_bar_event event ->
               (match Technical.parse_bar event with
                | Error error -> failwith ("archive bar: " ^ error)
                | Ok bar ->
@@ -479,12 +479,14 @@ let run_hot_stream ~trade =
                    | Some (previous, reference_received_ns)
                      when Paper_crypto.sample_due ~reference_received_ns
                        ~current_received_ns:received_ns ->
-                     let candidate = current.bid > previous.ask ||
-                       current.ask < previous.bid in
+                     let cross_evidence = Paper_crypto.quote_cross_evidence
+                       ~previous ~current in
+                     let candidate = Option.is_some cross_evidence in
                      log "HOT_SAMPLE reference_quote_time=%s quote_time=%s window_ms=%d candidate=%b policy=quote_cross_30s_v1"
                        previous.timestamp current.timestamp
                        ((received_ns - reference_received_ns) / 1_000_000) candidate;
                      if candidate then (
+                       let cross_direction, trigger_move_bps = Option.get cross_evidence in
                        let decision_ns = int_of_float (Unix.gettimeofday () *. 1_000_000_000.) in
                        let context_frame, context_time, context_trend,
                            context_retrieved =
@@ -496,9 +498,11 @@ let run_hot_stream ~trade =
                            "1Min", reading.bar.timestamp, reading.trend,
                            "stream"
                          | None, None -> "none", "none", "warming", "none" in
-                       log "HOT_DECISION quote_time=%s receive_to_decision_ms=%.3f candidate=true policy=quote_cross_30s_v1 context_frame=%s context_bar=%s trend=%s context_retrieved=%s probability=unknown"
+                       log "HOT_DECISION quote_time=%s receive_to_decision_ms=%.3f candidate=true policy=quote_cross_30s_v1 reference_bid=%.10g reference_ask=%.10g current_bid=%.10g current_ask=%.10g cross_direction=%s trigger_move_bps=%.8f context_frame=%s context_bar=%s trend=%s context_retrieved=%s probability=unknown"
                          current.timestamp
                          (float_of_int (decision_ns - received_ns) /. 1_000_000.)
+                         previous.bid previous.ask current.bid current.ask
+                         cross_direction trigger_move_bps
                          context_frame context_time context_trend context_retrieved;
                        spawn_worker "quote_cross" (fun () ->
                          let age_ns = quote_age_ns received_ns in

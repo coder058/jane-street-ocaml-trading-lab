@@ -116,6 +116,17 @@ export function reasonForOrder(order: PaperOrder, decision: Record<string, strin
   if (decision.policy !== "quote_cross_30s_v1")
     return `Recorded policy: ${decision.policy ?? "unknown"}.`;
   return order.side === "buy"
-    ? "Current bid crossed above the earlier sampled ask."
-    : "Current ask crossed below the earlier sampled bid.";
+    ? "Buy trigger: the current bid crossed above the earlier sampled ask."
+    : "Sell trigger: the current ask crossed below the earlier sampled bid.";
+}
+
+export function quoteEvidence(decision: Record<string, string> | null) {
+  if (!decision) return null;
+  const values = [decision.reference_bid, decision.reference_ask,
+    decision.current_bid, decision.current_ask, decision.trigger_move_bps].map(Number);
+  if (!values.every(Number.isFinite) || values.slice(0, 4).some((value) => value <= 0)
+    || values[4] <= 0 || !["up", "down"].includes(decision.cross_direction ?? "")) return null;
+  return { referenceBid: values[0], referenceAsk: values[1],
+    currentBid: values[2], currentAsk: values[3], triggerMoveBps: values[4],
+    direction: decision.cross_direction as "up" | "down" };
 }

@@ -260,10 +260,53 @@ Codex follow-ups. This file is the handoff for the scheduled follow-up loop.
   but skipped upload because the prior digest was unchanged and its heartbeat
   was not yet due. Public monitor visibility remains to be verified.
 
+## 09:31–09:35 UTC follow-up (28 September)
+
+- Dublin's paper service, Alpaca capture and Hyperliquid read-only capture were
+  active at the checks. The paper service had zero systemd restarts at 09:11;
+  the pending-order journal was absent and a complete broker query shortly
+  before the planned restart found zero unresolved orders.
+- The complete read-only snapshot at 09:31:38 UTC contained 252 bot orders,
+  180 buy fills and 227 sell fills. Buy notional was $4,136.980382580415 and
+  sell notional was $4,110.776598744178, a filled cash difference of
+  −$26.203783836237 before fee activities. It is not a realized or net P&L:
+  the broker held 0.000186743 BTC marked at $15.460531. `CFEE` and `FEE` each
+  returned zero rows. The 0.000123549 BTC gross quantity difference is about
+  0.250166% of bought quantity, consistent with an asset fee but not a matched
+  fee attribution. Net paper P&L remains unverified.
+- Broker order and fill histories were complete, but the public decision
+  journal was capped at 4,000 events. Exact trace matching found 227 bot orders
+  with a decision record and 25 without one. Do not invent triggers for those
+  missing records.
+- Hyperliquid health read five archived sessions with 784,955 BBO updates,
+  82,035 candle updates and 6,824 allMids updates; it saw 126 distinct mid
+  symbols including the 14 selected contracts, zero locally archived sequence
+  gaps and zero malformed lines. The live hourly gzip member correctly appears
+  under `incompleteGzipFiles` until it is rotated and closed; this is not proof
+  of provider-side completeness.
+- The first live health scan had aborted on that open gzip trailer. The scanner
+  now retains its flushed prefix and reports the partial file. A synthetic
+  regression test covers that case; 21 Python tests pass.
+- New OCaml decision records now include both quote pairs, cross direction and
+  trigger distance in basis points. The arithmetic is a pure tested helper for
+  upward, downward and absent crosses. The remote Dune 3.24.2 build and all
+  OCaml tests passed. The monitor has corresponding fields and the exporter
+  allowlist preserves them; eight web tests, TypeScript typecheck and a Next.js
+  production build passed. The read-only exporter passed a dry run with 254
+  orders, 411 fills, 228 decision records and a 976,762-byte payload. It and
+  the OCaml binary were installed after complete broker queries showed zero
+  unresolved orders and the durable pending journal was absent. The service
+  restarted in paper mode and loaded 194 contiguous BTC bars after the
+  multi-symbol warmup fix. Its first post-restart sample at 09:43:43 was
+  `candidate=false`; no real order has yet exercised the newly stored quote
+  fields. No strategy or risk limit changed.
+
 ## Next verified steps
 
-1. Recheck service, feed, broker position, open orders and pending journal.
-   If their state conflicts, halt new submissions and diagnose before restart.
+1. Publish the monitor changes, trigger a normal signed telemetry upload and
+   verify a new decision event, payload and public monitor row. Wait for a real
+   quote-cross candidate before claiming a broker order displayed its exact
+   prices; do not manufacture an order just to exercise the UI.
 2. Reconcile all bot fills with Alpaca `CFEE`/`FEE` activities when posted;
    distinguish gross filled cash flow, open inventory and actual net P&L.
 3. Continue the order-to-quote audit with order timings, decision quote age,

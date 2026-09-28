@@ -12,6 +12,19 @@ let () =
   let old = quote "2026-09-27T01:00:00Z" 100. 101. in
   let up = quote "2026-09-27T01:00:01Z" 102. 103. in
   let down = quote "2026-09-27T01:00:02Z" 98. 99. in
+  (* # SOURCE: synthetic quote pairs; expected cross gaps are 10,000/101 and
+     10,000/99 basis points. 1e-9 is only a Float unit-test tolerance. *)
+  (match Paper_crypto.quote_cross_evidence ~previous:old ~current:up with
+   | Some ("up", move) ->
+     check (Float.abs (move -. (10_000. /. 101.)) < 1e-9) "up cross margin"
+   | _ -> failwith "up cross evidence");
+  (match Paper_crypto.quote_cross_evidence ~previous:old ~current:down with
+   | Some ("down", move) ->
+     check (Float.abs (move -. (10_000. /. 99.)) < 1e-9) "down cross margin"
+   | _ -> failwith "down cross evidence");
+  let inside = quote "2026-09-27T01:00:03Z" 100.5 101.5 in
+  check (Paper_crypto.quote_cross_evidence ~previous:old ~current:inside = None)
+    "no-cross evidence";
   check (Paper_crypto.decide ~previous:old ~current:up ~position_qty:0.
            ~has_open_order:false = Buy) "buy on crossed quote";
   check (Paper_crypto.decide ~previous:old ~current:down ~position_qty:0.01

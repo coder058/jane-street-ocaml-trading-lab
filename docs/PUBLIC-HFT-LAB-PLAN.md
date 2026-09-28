@@ -1,0 +1,387 @@
+# Plan de entrega pública: laboratorio de ejecución y microestructura
+
+Fecha de revisión inicial: 28 de septiembre de 2026, 01:55 CEST.
+Alcance solicitado: plan detallado, trabajo inline, sin agentes paralelos.
+Este documento propone trabajo; no certifica que sus entregables futuros existan.
+
+## 1. Estado comprobado
+
+- Repositorio público actual: `coder058/jane-street-ocaml-trading-lab`, último
+  commit local `d6c4efe`. Tres archivos nuevos de captura Hyperliquid estaban
+  sin commit al revisar: el colector, su auditor de cobertura y su servicio.
+- Dublín: ejecutor OCaml paper, captura Alpaca, captura pública Hyperliquid y
+  temporizador de análisis estaban activos. Los tres procesos persistentes
+  mostraban cero reinicios desde sus arranques actuales; esto no demuestra
+  disponibilidad prolongada.
+- Memoria del VPS: 1.910 MiB totales, 1.448 MiB disponibles; 48 GiB libres en
+  disco. No hay evidencia actual que justifique ampliar este VPS a 8 GB.
+  Esto no mide los otros servidores o bots llamados Polybow.
+- Snapshot público a las 23:55 UTC del día 27: 103 órdenes de cuenta, 76
+  órdenes BTC con ejecución y 135 registros de fills de cuenta. Los recuentos
+  de órdenes, fills y operaciones cerradas son conceptos distintos.
+- Posición BTC observada: 0,000709101 BTC, valor marcado de $59,887352. AAPL
+  sigue siendo una posición anterior protegida. El equity total de cuenta
+  ($101.456,70 en ese snapshot) incluye AAPL y no mide el resultado del bot.
+- La UI mostraba aproximadamente −$3,30 como flujo ejecutado más inventario
+  marcado; lo etiquetaba como indicativo. P&L neto cerrado: todavía no
+  verificado. La UI contiene historial, fills parciales y una razón textual,
+  pero algunos inspectores dicen que no conservaron los precios de la
+  cotización que originó la decisión.
+- Alpaca observa 15 pares cripto. Solo BTC puede enviar órdenes paper. La
+  política activa es `quote_cross_30s_v1`, no calibrada. Murphy/candlesticks y
+  Markov se observan en shadow y no autorizan operaciones.
+- La nueva captura Hyperliquid recibió 29 confirmaciones de suscripción:
+  allMids de xyz y BBO/velas 1m para 14 contratos seleccionados. En el smoke
+  de 15 segundos recibió 288 mensajes; allMids incluyó 126 nombres. Recibir
+  un mid no demuestra liquidez, vigencia del mercado ni análisis completo.
+- Entre los FX-like activos encontrados en xyz están EUR, JPY y GBP. No se
+  verificaron diez pares FX. Las especificaciones y orientación de cada
+  contrato deben confirmarse antes de etiquetarlos como pares spot conocidos.
+- El camino HTTP OCaml crea procesos curl. Hay timestamps de reloj civil,
+  escritura/fsync y comprobaciones REST alrededor de las decisiones. No hay
+  un benchmark sostenido que permita presentar el sistema actual como HFT.
+
+### Actualización operativa, 28 de septiembre de 2026, 09:03 UTC
+
+- La primera captura Hyperliquid se reinició dos veces por `AssertionError`:
+  una reconexión cerraba el archivo, pero no restablecía el estado de fecha.
+  También produjo un JSONL sin compresión de unos 200 MB. El archivo se
+  conservó, sin comprimir ni borrar.
+- Se corrigió el límite de sesión, se añadieron archivos gzip por hora con ID
+  de sesión y el lector ahora acepta ambas generaciones de archivos.
+- Tras instalar el cambio, systemd quedó activo, con 29 suscripciones
+  confirmadas y 0 reinicios desde ese arranque manual. La verificación leyó
+  cuatro sesiones de la fecha UTC: 731.676 mensajes BBO, 76.914 candle,
+  6.447 allMids, cero líneas corruptas y cero huecos en las secuencias que
+  se llegaron a escribir localmente. Esos ceros no detectan eventos omitidos
+  antes de la recepción.
+- El ejecutor OCaml y la captura Alpaca seguían activos sin reinicios al
+  comprobar. Snapshot público posterior a las 07:18 UTC tenía 215 órdenes y
+  340 fills de cuenta; el filtro de posiciones BTC de esa consulta no
+  produjo una fila, así que no inferir el inventario actual. Volver a
+  reconciliar con snapshot firmado y Alpaca antes de presentar P&L.
+
+## 2. Trabajo anterior recuperado
+
+### hlbot privado
+
+Checkout privado local; su ruta de usuario se omite de este documento público.
+
+- `hlbot/data/`: validación y almacenamiento de datos; los 29 tests de
+  `tests/test_data.py` pasaron en esta revisión. Los 77,9 millones de barras
+  y demás métricas de los informes son resultados históricos documentados;
+  no se recalculó ahora todo el corpus ni se verificaron todos sus archivos.
+- `hlbot/capture/ws.py`: captura de trades, BBO y contexto, bloqueo de escritor
+  único, rotación y mecanismos para manejar replays/reconexiones. Los informes
+  antiguos registran 531 suscripciones; no es un benchmark actual de Dublín.
+- `research/` y `docs/`: evaluaciones, controles y retractaciones que deben
+  conservarse en el registro de experimentos. Hay secciones antiguas que no
+  incorporan conclusiones posteriores; comprobar resultados y código, no
+  copiar titulares de README como si fueran evidencia nueva.
+- `hlbot/live/vsurge_bot.py`: genera objetivos de cartera; en modo paper
+  registra decisiones y no simula toda la vida de órdenes y fills. Su log
+  local termina el 6 de agosto. La prueba de presencia de su clave dio falso.
+- `hlbot/live/execute.py`: puede operar MAINNET cuando se arma. Requiere
+  revisión antes de reutilizar: no es un adaptador testnet; el precio por
+  defecto se calcula a ±2% del mid pese a describirse como precio al touch;
+  falta reconciliar órdenes abiertas y cancelar/sustituirlas; no cierra por
+  sí solo nombres ausentes del nuevo objetivo. El estado del bot se escribe
+  antes de conocer el resultado de ejecución. No importar esta ruta al paper.
+- `hlbot/strategy/quoter.py`: scaffold con modelo económico retractado.
+  `paper_quoter.py`: simulación de cola que necesita revisar supuestos y
+  versiones. Sus fills no son fills de una cuenta de exchange.
+
+### Perp Signal Radar y Pattern Forge
+
+El checkout privado de Perp Signal Radar contiene el precursor OCaml, un panel
+Python multivenue, estudios, adaptadores, calibración, simuladores paper y
+una investigación extensa. Tiene muchos cambios sin commit: preservar antes
+de extraer módulos. Su catálogo de 191 estudios no demuestra 191 señales
+predictivas ni reproducciones exactas de TradingView.
+
+El repositorio público Pattern Forge contiene la presentación pública:
+validación de velas, replay causal, agregación sin rellenar huecos, EMA/RSI/MACD,
+Bollinger, formas de velas y gráficos. Reutilizar las funciones y fixtures
+con pruebas de paridad; no copiar las páginas enteras dentro del monitor.
+
+## 3. Producto y arquitectura propuestos
+
+Nombre público propuesto: **OCaml Market Microstructure Lab**. Una etiqueta
+independiente evita sugerir afiliación a Jane Street. Posicionamiento inicial:
+laboratorio de ejecución por eventos, microestructura, ML y paper trading,
+con benchmarks reproducibles. La denominación HFT debe depender de las
+mediciones y del alcance demostrado, no del número de operaciones.
+
+```text
+Feeds públicos -> normalización + archivo durable -> replay determinista
+                         |
+                         v
+              estado de mercado en OCaml
+                         |
+         indicadores / inferencia de modelo versionado
+                         |
+              intención -> riesgo -> OMS
+                         |
+              adaptador paper/testnet
+                         |
+        reconciliación de órdenes, fills y posiciones
+                         |
+              ledger -> API de lectura -> monitor
+
+Python: preparación de datasets, entrenamiento, evaluación y reportes
+LLM opcional: investigación/explicaciones con referencias, fuera de ejecución
+```
+
+OCaml mantiene el motor, estados de órdenes y riesgo. Python mantiene datos y
+ML; TypeScript/Next mantiene la UI. No reescribir todo en C/C++: perfilar primero
+y usar un componente nativo solo si un cuello medido lo justifica. Rails no
+resuelve los cuellos observados de este motor.
+
+## 4. Secuencia de ejecución y puertas de aceptación
+
+### Paso 1 — Congelar y ordenar la base
+
+1. Inventariar fuentes, versiones, cambios locales, modelos y servicios.
+2. Guardar manifiestos y hashes de datasets; distinguir histórico, recibido
+   en tiempo real y datos sintéticos. Preservar estados anteriores.
+3. Versionar la captura nueva después de revisar bloqueo de escritor,
+   cierre de archivos, reinicios y reserva de disco.
+4. Registrar políticas descartadas para no repetir búsquedas ya refutadas.
+
+**Termina cuando:** un manifiesto permite reconstruir qué código y modelo
+produjo cada resultado; no quedan servicios desplegados sin versión conocida.
+
+### Paso 2 — Cerrar contabilidad y trazabilidad
+
+1. Crear un ledger por venue/cuenta/estrategia con importación idempotente de
+   órdenes, fills, comisiones en efectivo o activo y funding cuando aplique.
+2. Distinguir importe solicitado, ejecutado, cancelado y posición restante.
+3. Emparejar lotes con una convención explícita; tratar parciales y residuos.
+4. Separar AAPL y capital preexistente del resultado BTC; no mostrar el
+   cambio de equity total como resultado del bot.
+5. Unir cada intención y orden con input exacto, timestamps, regla/modelo,
+   features, precios bid/ask, filtros de riesgo y resultado del broker.
+6. Reconstruir evidencia histórica solo donde exista; marcar huecos reales.
+
+**Termina cuando:** balances y cantidades cuadran con el broker a la precisión
+documentada; cualquier diferencia aparece explicada. La UI puede mostrar
+P&L realizado/no realizado y costes sin dobles conteos.
+
+### Paso 3 — Registro de instrumentos y cobertura real
+
+1. Catalogar venue, símbolo original, tipo de contrato, subyacente, divisa,
+   tick/lote, calendario, estado activo y endpoint mainnet/testnet/paper.
+2. Incluir BTC y otros cripto; acciones/ETF de Alpaca según permisos reales;
+   HIP-3 FX-like, índices y energía según especificaciones verificadas.
+3. Distinguir DIA/QQQ como ETF de sus índices de referencia y los perpetuos
+   HIP-3 de spot FX o propiedad de acciones.
+4. Mostrar por mercado: descubierto, suscrito, recibiendo, analizable,
+   autorizado para paper, suspendido. Un catálogo no equivale a cobertura.
+5. Mantener peticiones de diez FX pendientes de un inventario que las soporte.
+
+**Termina cuando:** todos los mercados visibles tienen procedencia, tipo,
+estado y cobertura comprobables; no hay capacidades anunciadas por inferencia.
+
+### Paso 4 — Captura resistente y dataset reproducible
+
+1. Recuperar del hlbot los controles de escritor único, replay, deduplicación,
+   rotación y liveness por símbolo; adaptar rutas y contratos HIP-3.
+2. Archivar BBO, trades, libro disponible y contexto/funding/oracle. Verificar
+   qué canales son snapshots y cuáles incrementales antes de reconstruir libro.
+3. Conservar reloj de exchange y recepción; usar reloj monotónico para duraciones
+   locales. Medir sincronización antes de interpretar diferencias de relojes.
+4. Hacer visibles silencios, errores, eventos fuera de orden y pérdidas. Si el
+   proveedor no da secuencias, declarar lo que no puede detectarse.
+5. Implementar cierre temporal de velas trade-driven y revisiones as-of; no
+   inventar velas sin eventos. Generar 1m/5m/30m/1h/4h desde fuente declarada.
+6. Comprimir, rotar y presupuestar retención a partir del crecimiento medido.
+
+**Termina cuando:** reiniciar o desconectar no corrompe ni duplica datos y el
+replay reproduce las mismas observaciones a partir de un archivo con hash.
+
+### Paso 5 — Motor OCaml y benchmark de latencia
+
+1. Separar feed, estrategia, riesgo, persistencia, ejecución y telemetría por
+   colas acotadas, con comportamiento explícito ante saturación.
+2. Medir antes de optimizar: recepción->normalización->features->decisión->
+   riesgo->envío, y por separado envío->ack->fill. Conservar tamaños de muestra.
+3. Sustituir procesos curl por transporte persistente si el perfil confirma
+   su coste. Reconciliar por eventos y snapshots sin quitar garantías de riesgo.
+4. Reducir asignaciones/copias; medir pausas GC y escrituras. Conservar el
+   journal durable previo al envío y medir su coste, sin esconderlo del benchmark.
+5. Publicar p50/p95/p99/máximo, throughput sostenido, backlog y pérdidas,
+   hardware, commit, carga y dataset. Comparar versiones sobre la misma carga.
+
+**Termina cuando:** cualquiera puede reproducir el benchmark offline y
+entender la diferencia entre latencia local y red externa. No fijar objetivos
+en microsegundos antes de medir la línea base ni llamar HFT a velas de 1m.
+
+### Paso 6 — Replay de ejecución y OMS
+
+1. Modelar estados: intención, envío pendiente, aceptada, parcial, cancelación
+   pendiente, cancelada, ejecutada, rechazada y resultado desconocido.
+2. Probar restart después de enviar pero antes de recibir ack, duplicados,
+   cancel/fill en carrera, timeout y desconexión. Nunca reintentar a ciegas.
+3. Añadir simulación con bid/ask y liquidez observada; diferenciar cola estimada
+   de cola conocida. BBO/L2 no revela nuestra posición exacta en L3.
+4. Versionar escenarios optimistas/conservadores y comparar con fills paper.
+
+**Termina cuando:** cada orden tiene un estado reconciliable tras fallos y
+ningún fill simulado se presenta como fill de broker. Alpaca paper no modela
+cola, impacto ni deslizamiento por latencia, según su documentación.
+
+### Paso 7 — Análisis técnico compartido
+
+1. Extraer definiciones de Pattern Forge y crear fixtures comunes Python/
+   TypeScript/OCaml. Verificar warm-up, huecos, revisiones y momento conocido.
+2. Producir features de velas, tendencia, volatilidad, spread, imbalance y flujo
+   según calidad real disponible. Separar marcos lentos de eventos rápidos.
+3. Registrar por candidato qué observación lo activa y qué lo invalida.
+4. Mantener Energy Monitor como contexto con fecha de publicación y revisiones;
+   evaluar su relevancia antes de usarlo para predecir mercados intradía.
+
+**Termina cuando:** una misma entrada produce features equivalentes y cada
+feature estaba disponible antes de la decisión; no se confunde patrón con edge.
+
+### Paso 8 — ML con una pregunta medible
+
+1. Definir primero el objetivo: retorno ejecutable a un horizonte, riesgo de
+   selección adversa tras fill, probabilidad de fill o volatilidad futura.
+2. Empezar con baseline constante, modelo lineal/logístico y Markov; probar
+   un modelo de árboles como candidato. Redes profundas solo si aportan mejora
+   y hay suficientes datos para evaluarla.
+3. Dividir cronológicamente por fecha, purgar etiquetas solapadas y fijar
+   embargo según horizonte. Ajustar transformaciones solo en entrenamiento.
+4. Congelar configuración antes del test; registrar cada intento y comparar
+   controles, ablations por familia de features y estabilidad por mercado/régimen.
+5. Medir Brier/log-loss y calibración si se publica probabilidad; intervalos de
+   incertidumbre y resultados con costes, no solo accuracy o tasa de acierto.
+6. Exportar modelo pequeño y versionado al motor; comprobar paridad de
+   predicciones e instrumentar coste de inferencia y detección de deriva.
+
+**Termina cuando:** existe evaluación reproducible sobre datos no usados para
+seleccionar el modelo. Si no supera el baseline, el resultado se publica como
+negativo y el modelo sigue sin autoridad. No prometer rentabilidad.
+
+### Paso 9 — Riesgo, tamaño y testnet multiactivo
+
+1. Mantener los límites paper actuales hasta tener presupuestos por estrategia,
+   cartera, correlación, pérdida y liquidez explícitos.
+2. Evaluar stop por invalidación/volatilidad y salida temporal en el mismo
+   experimento que la entrada. Incluir gaps y la posibilidad de no ejecución.
+3. Mapear $50/$100/$500 a una política documentada solo con calibración; un
+   porcentaje de dirección favorable no determina por sí mismo el tamaño.
+4. Construir un adaptador Hyperliquid testnet aislado con allowlist de origen,
+   gestión de nonce/ID, cancelaciones, límites y conciliación.
+5. Comprobar acceso a cartera testnet, fondos de prueba y contratos realmente
+   disponibles. El feed mainnet no equivale a ejecución testnet.
+6. Promover candidatos en shadow->simulador->paper/testnet con criterios fijados
+   antes de mirar el resultado. La automatización revierte ante fallos medidos.
+
+**Termina cuando:** se demuestra un ciclo completo y reconciliado en cada venue
+paper anunciado. Sin cartera testnet verificada, Hyperliquid sigue en lectura.
+
+### Paso 10 — Monitor público comprensible
+
+1. Primera pantalla: estado, posición abierta, P&L realizado/no realizado,
+   comisiones/funding, última operación y frescura de datos.
+2. Tabla de operaciones cerradas con entrada/salida/resultado; tabla distinta
+   para órdenes y parciales; filtros por venue, símbolo y versión de estrategia.
+3. Inspector: gráfico con precio y fills, features al decidir, probabilidad si
+   calibrada, motivo, rechazo/abstención, tamaño, stop y cadena de timestamps.
+4. Radar multiactivo: cobertura, spread, marcos disponibles y estado operativo.
+   Evitar mostrar cien instrumentos como si cien estuvieran siendo operados.
+5. Página Engineering: arquitectura, benchmark, replay de un incidente, modelo
+   y enlaces al commit/experimento. Detalles técnicos fuera de la vista operativa.
+6. Publicar resumen firmado y minimizado; revisar derechos de redistribución
+   antes de publicar datos crudos. Probar móvil, accesibilidad y estados vacíos.
+
+**Termina cuando:** una persona puede localizar una operación, entender por
+qué ocurrió y reconciliar su resultado sin leer logs privados.
+
+### Paso 11 — Operación y fallos
+
+1. Alertas accionables de feed atrasado, reloj, backlog, disco, reconciliación,
+   pérdida de firma y modelo no válido; umbrales derivados de observaciones.
+2. Probar restauración de backup y rollback de código/modelo.
+3. Hacer una prueba prolongada y declarar duración, carga, fallos y recuperación;
+   su duración se fija como requisito de prueba, no como evidencia estadística.
+4. Perfilar memoria/CPU/I/O antes de ampliar capacidad. Usar Dublín para este
+   proyecto; no ocupar Frankfurt mientras el otro agente trabaja en Fly Brain.
+
+**Termina cuando:** los incidentes se detectan, las órdenes quedan reconciliadas
+y el runbook permite recuperar el servicio sin depender del autor.
+
+### Paso 12 — Paquete de presentación
+
+1. README con problema, demo, arquitectura y un comando de replay offline.
+2. Dataset pequeño redistribuible o sintético explícito, hashes y resultados
+   esperados; instalación desde checkout limpio y CI sin secretos.
+3. Informe de benchmark, model card, registro de experimentos y limitaciones.
+4. Demo guiada: evento->features->decisión->riesgo->orden->fill->P&L, más un
+   fallo recuperado. Video breve opcional, sin cifras de rendimiento inventadas.
+5. Revisión de secretos, licencias, dependencias y afirmaciones públicas.
+6. Release etiquetada; destacar contribución propia y explicar decisiones,
+   incluida la evidencia que descartó estrategias.
+
+**Termina cuando:** otra persona reproduce la demo y el benchmark, y todas las
+afirmaciones del portfolio enlazan a evidencia comprobable.
+
+## 5. Orden práctico y esfuerzo
+
+Ruta crítica: 1->2->3->4->5->6->7->8->9->10->11->12. La UI puede diseñarse después
+del ledger y cerrarse al estabilizar los modelos; la captura ya puede acumular
+datos mientras se desarrolla el resto. El trabajo se realiza inline.
+
+Estimación de planificación, no compromiso: ordenar fuentes, ledger y primera
+UI clara puede ocupar varios días; replay/OMS/benchmark y ML evaluado pueden
+requerir semanas. El tiempo necesario para evidencia forward no se obtiene
+acelerando el reloj ni aumentando artificialmente el número de órdenes.
+
+La primera entrega debe ser contabilidad reconciliada + historial explicable +
+replay reproducible. La entrega HFT/ML posterior debe aportar mediciones de
+microestructura, ejecución y modelos; la rentabilidad puede seguir sin aparecer.
+
+## Verificación operativa — 28 de septiembre, 09:43 UTC
+
+- Dublín volvió a comprobar los tres servicios: ejecutor Alpaca paper, captura
+  Alpaca y captura Hyperliquid pública están activos. El ejecutor conserva el
+  endpoint paper, la protección AAPL, conciliación de órdenes pendientes, la
+  compra base de $100 y el tope BTC de $500.
+- Snapshot de broker completo a las 09:37:25 UTC: 253 órdenes del bot, 408
+  fills y BTC plana. Compras ejecutadas $4.136,980382580415, ventas
+  $4.126,234075030758 y diferencia de efectivo −$10,746307549657 antes de
+  actividades de fees. `CFEE`/`FEE` no mostraron filas; la diferencia de
+  cantidad frente a compras fue 0,000123549 BTC. **No es P&L neto verificado**:
+  las fees aún no se atribuyen por fill y los resultados son simulados.
+- El ejecutor compilado añade al evento de decisión los dos pares bid/ask, el
+  sentido del cruce y su margen en bps. Tests sintéticos cubren cruces alcistas,
+  bajistas y ausencia de cruce. El exporter conserva estos campos y el inspector
+  solo los muestra si existen en el registro; órdenes históricas incompletas
+  continúan identificadas como tales.
+- Un primer reinicio reveló que el calentamiento 1m intentaba parsear velas de
+  todos los símbolos del archivo compartido como si fueran BTC. Se añadió un
+  filtro explícito por `BTC/USD`, se probó y desplegó de nuevo. A las 09:42:18
+  el servicio cargó 194 velas BTC contiguas y ya no reportó fallo. El primer
+  muestreo posterior, a las 09:43:43, fue `candidate=false`; por tanto aún no se
+  ha observado una orden real con la nueva traza de precios.
+- El verificador de Hyperliquid detectó que el gzip de la hora actual sigue
+  abierto. Ahora cuenta su prefijo escrito y lo enumera en
+  `incompleteGzipFiles`; no lo confunde con un archivo cerrado ni afirma
+  integridad de eventos que el proveedor no entregó. Se observaron cinco
+  sesiones, 784.955 BBO, 82.035 actualizaciones de velas, 6.824 allMids,
+  cero huecos de secuencia local y cero líneas JSON corruptas.
+- Verificación local/remota: 21 pruebas Python, 8 pruebas web, TypeScript y
+  build Next.js; Dune 3.24.2 compiló y pasó toda la suite OCaml. El proceso
+  actual mantiene `quote_cross_30s_v1`, sin aumentar actividad ni cambiar
+  tamaños; el monitor web aún requiere publicar/verificar la nueva interfaz.
+
+## Fuentes técnicas verificadas
+
+- [Alpaca: límites de la simulación paper](https://docs.alpaca.markets/us/docs/paper-trading).
+- [Hyperliquid: canales y formatos WebSocket](https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api/websocket/subscriptions).
+- [Hyperliquid: contratos HIP-3](https://hyperliquid.gitbook.io/hyperliquid-docs/hyperliquid-improvement-proposals-hips/hip-3-builder-deployed-perpetuals).
+
+Los backtests antiguos se citan como registros históricos hasta reproducir sus
+salidas. Paper/testnet y benchmarks locales no prueban rentabilidad live ni una
+ventaja de latencia frente a participantes profesionales.
