@@ -408,6 +408,15 @@ microestructura, ejecución y modelos; la rentabilidad puede seguir sin aparecer
   10 acciones AAPL protegidas (valor $3.404,40 y P&L no realizado $1.457), que
   no pertenecen al bot. El equity de $101.434,50 no permite atribuir el P&L.
   `FEE`/`CFEE` devolvieron cero filas; falta reconciliar fees y ledger neto.
+- En una consulta posterior, Alpaca devolvió 259 órdenes y 428 fills. La suma
+  de `FILL.qty` fue 0,051141176 BTC en compras y 0,051013235 BTC en ventas,
+  diferencia de 0,000127941 BTC (0,250172% de lo comprado), mientras el endpoint
+  de posiciones reportó BTC plana. Es consistente con un fee de compra de
+  0,25% cobrado en BTC recibido, pero todavía no es atribución confirmada.
+  Alpaca documenta que `CFEE`/`FEE` puede publicarse al final del día. Con
+  $4.271,02 vendidos, el fee de venta sería unos $10,68 si todo el volumen
+  pertenece al primer tier y los fills IOC son taker; es una estimación, no
+  un P&L neto observado. El flujo de fills fue −$10,95 antes de esa conciliación.
 - El auditor exacto de pares cotizados enlazó 232 decisiones `HOT_SAMPLE`;
   102 órdenes acabaron `filled` y 130 `canceled`. La mediana del movimiento
   que activa la regla fue 1,510731 bps. Un análisis posterior de 389 fills en
@@ -436,6 +445,7 @@ microestructura, ejecución y modelos; la rentabilidad puede seguir sin aparecer
 ## Fuentes técnicas verificadas
 
 - [Alpaca: límites de la simulación paper](https://docs.alpaca.markets/us/docs/paper-trading).
+- [Alpaca: tasas crypto y registro diferido de fees](https://docs.alpaca.markets/us/docs/crypto-fees).
 - [Hyperliquid: canales y formatos WebSocket](https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api/websocket/subscriptions).
 - [Hyperliquid: contratos HIP-3](https://hyperliquid.gitbook.io/hyperliquid-docs/hyperliquid-improvement-proposals-hips/hip-3-builder-deployed-perpetuals).
 

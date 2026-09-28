@@ -349,6 +349,19 @@ Codex follow-ups. This file is the handoff for the scheduled follow-up loop.
   presented as bot P&L. FEE and CFEE returned zero first-page rows; that does
   not establish that every economic execution cost is zero. Bot net P&L stays
   unverified.
+- A follow-up snapshot at 10:21:36 UTC had 259 bot orders and 428 fills. Gross
+  FILL activity buy qty summed to 0.051141176 BTC and sell qty to 0.051013235
+  BTC, a difference of 0.000127941 BTC (0.250172% of buys); the position
+  endpoint reported no BTC holding. This is consistent with Alpaca's
+  documented tier-one 0.25% taker
+  fee being charged in the credited crypto on buys, but no fee activity has
+  posted to prove that attribution. Alpaca says crypto fee activities may post
+  at end of day, so today's empty `CFEE`/`FEE` result is not a final fee ledger.
+  The documented 0.25% fee on sell proceeds would be about $10.68 on the
+  observed $4,271.02 sells if all filled IOC orders were tier-one takers; this
+  is an estimate only. The −$10.95 fill cash difference therefore cannot be
+  called net P&L, and the incomplete coin quantity must be reconciled before
+  presenting a closed-trade result.
 - The exact-quote audit now matches 232/232 `HOT_SAMPLE` order traces, with
   102 filled and 130 canceled; 25 earlier bot orders still have no such trace.
   Crossing magnitudes ranged from 0.011831 to 12.000184 bps, with a 1.510731
@@ -388,8 +401,10 @@ Codex follow-ups. This file is the handoff for the scheduled follow-up loop.
    wait for CI. Keep the public response fields explicitly labeled as delayed,
    fee-excluding diagnostics if they are ever added to the monitor.
 2. Reconcile the bot's full BTC inventory and cash flow from its first order,
-   Alpaca activity pages and any asset-denominated fees; explain AAPL as a
-   separate protected account holding. Do not infer P&L from account equity.
+   Alpaca end-of-day activity pages and any asset-denominated fees; test the
+   observed buy-quantity reduction against the fee rows rather than assigning
+   it by appearance. Explain AAPL as a separate protected account holding.
+   Do not infer P&L from account equity.
 3. Measure decision-to-submit time, quote age, spread, partial-fill timing and
    quote delay around each response. Improve the markout only when the capture
    supports the exact sampling window; retain skipped/stale observations.
