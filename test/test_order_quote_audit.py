@@ -49,6 +49,35 @@ class OrderQuoteAuditTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "incomplete"):
                 audit(empty, empty, {"ordersComplete": False})
 
+    def test_orders_join_quotes_across_daily_capture_files(self) -> None:
+        # SOURCE: synthetic prior/current quotes model an order across midnight.
+        prior = "2026-09-27T23:59:30Z"
+        current = "2026-09-28T00:00:00Z"
+        client_id = "jsbotbtcbuy20260928T000000Z"
+        with tempfile.TemporaryDirectory() as temporary:
+            previous_capture = Path(temporary) / "previous.jsonl"
+            current_capture = Path(temporary) / "current.jsonl"
+            journal = Path(temporary) / "events.jsonl"
+            previous_capture.write_text(json.dumps({"event": {
+                "T": "q", "S": "BTC/USD", "t": prior, "bp": 99, "ap": 100,
+            }}), encoding="utf-8")
+            current_capture.write_text(json.dumps({"event": {
+                "T": "q", "S": "BTC/USD", "t": current, "bp": 101, "ap": 102,
+            }}), encoding="utf-8")
+            journal.write_text("\n".join(json.dumps({"at": current, "message": message})
+                for message in [
+                    f"HOT_SAMPLE reference_quote_time={prior} quote_time={current} candidate=true policy=quote_cross_30s_v1",
+                    f"SEND paper buy BTC/USD qty=1 limit=102 id={client_id}",
+                ]), encoding="utf-8")
+            result = audit([previous_capture, current_capture], journal, {
+                "ordersComplete": True, "orders": [{"id": "order",
+                    "clientOrderId": client_id, "status": "filled", "qty": "1",
+                    "filledQty": "1", "filledAvgPrice": "102"}],
+            })
+
+        self.assertEqual(result["matchedHotOrders"], 1)
+        self.assertEqual(result["unmatchedHotOrderIds"], [])
+
 
 if __name__ == "__main__":
     unittest.main()

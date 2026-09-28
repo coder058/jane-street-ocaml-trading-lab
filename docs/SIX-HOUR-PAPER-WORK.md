@@ -297,16 +297,44 @@ Codex follow-ups. This file is the handoff for the scheduled follow-up loop.
   the OCaml binary were installed after complete broker queries showed zero
   unresolved orders and the durable pending journal was absent. The service
   restarted in paper mode and loaded 194 contiguous BTC bars after the
-  multi-symbol warmup fix. Its first post-restart sample at 09:43:43 was
-  `candidate=false`; no real order has yet exercised the newly stored quote
-  fields. No strategy or risk limit changed.
+  multi-symbol warmup fix. No strategy or risk limit changed.
+
+## 09:53 UTC follow-up (28 September)
+
+- The signed public monitor now serves commit `85f7881`. Its GitHub `monitor`
+  job passed tests, TypeScript and production build. The OCaml Actions job
+  also passed opam setup, Dune build and the full OCaml suite; both workflow
+  jobs completed successfully at 09:48:21 UTC.
+- The live page showed a 09:53:25 UTC broker snapshot, 193 executed orders and
+  417 fills. The latest BTC position was 0.000119779 BTC, marked at $9.91.
+  Its displayed cash-plus-mark amount was −$10.84 USD, explicitly indicative;
+  closed-trade net P&L remains not verified.
+- At 09:53:50 UTC, the read-only reconciliation found 255 bot orders, 185 buy
+  fills and 232 sell fills. Buy notional was $4,206.982393537615 and sell
+  notional $4,186.234458128558, cash difference −$20.747935409057 before fee
+  activities. `CFEE`/`FEE` each still returned zero rows, and a quantity
+  difference of 0.000125670 BTC remains unattributed. Orders/fills pagination
+  was complete; the 4,000-event public journal was not complete. Net P&L is
+  still unverified.
+- The order/quote auditor originally read only the 28 September file, which
+  made 78 prior-day orders look unmatched. It now accepts multiple daily files;
+  across 27–28 September it matched 230/230 HOT_SAMPLE orders to their exact
+  captured quote pair and broker status, with zero unmatched. There were 101
+  filled and 129 canceled orders; crossing magnitudes ranged from 0.011831 to
+  12.000184 bps, median 1.529065. These are trigger movements, not forward
+  returns or evidence of an edge. Twenty-five other bot orders still have no
+  matched HOT_SAMPLE decision record; their reason remains unavailable.
+- The public inspector has now shown two real examples with exact quotes:
+  the 09:39:27 buy crossed upward by 0.230050 bps and received five partial
+  fills totaling $70 before cancellation of the remainder; the 09:52:03 sell
+  crossed downward by 1.184709 bps and received four partial fills totaling
+  $60 before cancellation of the remainder. These broker outcomes do not
+  validate the strategy.
 
 ## Next verified steps
 
-1. Publish the monitor changes, trigger a normal signed telemetry upload and
-   verify a new decision event, payload and public monitor row. Wait for a real
-   quote-cross candidate before claiming a broker order displayed its exact
-   prices; do not manufacture an order just to exercise the UI.
+1. Commit/push the multi-day audit fix and wait for all CI jobs to finish; the
+   deployed UI, live OCaml trace and exact order-to-quote join are now verified.
 2. Reconcile all bot fills with Alpaca `CFEE`/`FEE` activities when posted;
    distinguish gross filled cash flow, open inventory and actual net P&L.
 3. Continue the order-to-quote audit with order timings, decision quote age,

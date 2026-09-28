@@ -24,27 +24,29 @@ def clean_time(timestamp: str) -> str:
     return re.sub(r"[^A-Za-z0-9]", "", timestamp)
 
 
-def quote_index(capture: Path) -> dict[str, dict]:
+def quote_index(capture: Path | list[Path]) -> dict[str, dict]:
     quotes: dict[str, dict] = {}
     ambiguous: set[str] = set()
-    with capture.open(encoding="utf-8") as stream:
-        for line in stream:
-            event = json.loads(line).get("event", {})
-            if event.get("T") != "q" or event.get("S") != "BTC/USD":
-                continue
-            timestamp = event.get("t")
-            if timestamp in quotes and (quotes[timestamp]["bp"], quotes[timestamp]["ap"]) != (
-                event.get("bp"), event.get("ap")
-            ):
-                ambiguous.add(timestamp)
-            else:
-                quotes[timestamp] = event
+    captures = [capture] if isinstance(capture, Path) else capture
+    for path in captures:
+        with path.open(encoding="utf-8") as stream:
+            for line in stream:
+                event = json.loads(line).get("event", {})
+                if event.get("T") != "q" or event.get("S") != "BTC/USD":
+                    continue
+                timestamp = event.get("t")
+                if timestamp in quotes and (quotes[timestamp]["bp"], quotes[timestamp]["ap"]) != (
+                    event.get("bp"), event.get("ap")
+                ):
+                    ambiguous.add(timestamp)
+                else:
+                    quotes[timestamp] = event
     for timestamp in ambiguous:
         quotes.pop(timestamp, None)
     return quotes
 
 
-def audit(capture: Path, journal: Path, snapshot: dict) -> dict:
+def audit(capture: Path | list[Path], journal: Path, snapshot: dict) -> dict:
     telemetry = snapshot.get("telemetry", snapshot)
     if not telemetry.get("ordersComplete"):
         raise ValueError("broker order pagination is incomplete")
@@ -132,7 +134,7 @@ def audit(capture: Path, journal: Path, snapshot: dict) -> dict:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("capture", type=Path)
+    parser.add_argument("capture", type=Path, nargs="+")
     parser.add_argument("journal", type=Path)
     parser.add_argument("snapshot", type=Path)
     args = parser.parse_args()

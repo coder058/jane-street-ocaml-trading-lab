@@ -376,6 +376,30 @@ microestructura, ejecución y modelos; la rentabilidad puede seguir sin aparecer
   actual mantiene `quote_cross_30s_v1`, sin aumentar actividad ni cambiar
   tamaños; el monitor web aún requiere publicar/verificar la nueva interfaz.
 
+## Actualización publicada — 28 de septiembre, 09:53 UTC
+
+- El commit `85f7881` está publicado. El inspector web muestra cotizaciones
+  concretas en registros nuevos y explica explícitamente cuando una orden
+  histórica carece de traza. La compra paper de 09:39:27 se unió a su par de
+  quotes y broker: cruce alcista 0,230050 bps; cinco fills parciales sumaron
+  $70 y Alpaca canceló el resto. La venta de 09:52:03: cruce bajista
+  1,184709 bps; cuatro fills sumaron $60 y se canceló el resto.
+- El auditor independiente, leyendo los ficheros de captura del 27 y 28, enlazó
+  230 de 230 órdenes con `HOT_SAMPLE` al par exacto de quotes y estado del
+  broker; no dejó órdenes sin emparejar. Halló 101 estados `filled` y 129
+  `canceled`, cruce entre 0,011831 y 12,000184 bps, mediana 1,529065. Esto
+  caracteriza el disparador; no mide retorno posterior ni ventaja.
+- A las 09:53:50, el reconciliador leyó 255 órdenes, 417 fills y BTC abierta
+  por 0,000119779 ($9,91 marcada). La diferencia buy-minus-sell en efectivo
+  era −$20,747935 antes de activities; el monitor mostró −$10,84 al sumar la
+  marca BTC. Ambas magnitudes son orientativas y no reemplazan fees/lot ledger.
+  `CFEE` y `FEE` no tenían filas y quedan 25 órdenes sin `HOT_SAMPLE`; el P&L
+  neto sigue sin verificarse.
+- Se corrigió el auditor para aceptar varias capturas diarias: las 78 filas que
+  parecían ausentes procedían del 27 cuando la consulta solo leía el 28. La
+  prueba de cruce entre ficheros diarios pasó. El monitor CI completó con éxito;
+  ambos jobs de GitHub Actions completaron con éxito a las 09:48:21 UTC.
+
 ## Fuentes técnicas verificadas
 
 - [Alpaca: límites de la simulación paper](https://docs.alpaca.markets/us/docs/paper-trading).
