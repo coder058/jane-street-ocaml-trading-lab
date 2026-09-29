@@ -531,22 +531,70 @@ that rather than forcing more trades.
   dry run was 649,469 bytes, below the existing ingest limit, with complete
   broker pages and fee attribution. No OCaml source changed.
 
+## Public verification and review — 29 September 2026, 12:31 UTC
+
+- `6c0d5e1` was pushed to `main`; the fee-aware exporter was installed on
+  Dublin after saving the previous script as
+  `export_telemetry.py.bak-20260929-before-fee-pnl`. Local and VPS SHA-256
+  matched. The read-only dry run at `12:23:30.573562Z` had complete order,
+  fill and fee pages, bot fee attribution, and a 651,892-byte payload. The
+  public signed API subsequently returned snapshot
+  `2026-09-29T12:31:21.917073Z` with 645 bot orders, 1,095 fills and 996
+  posted `CFEE` rows. Both `jsbot-paper.service` and `jane-telemetry.timer`
+  were active; timer logs show successful uploads and unchanged heartbeats.
+- At that public snapshot, posted USD fees were −$25.76, posted BTC fees were
+  −0.000281995 BTC, fill cash flow was −$26.100734051581153069, and BTC market
+  value was $0. The resulting display value was −$51.860734051581153069
+  (−$51.86). The broker BTC position was flat; fills plus posted BTC fees still
+  differed from the position by −0.000024511 BTC. The journal window is
+  incomplete. Keep this number labeled provisional; no closed-lot FIFO ledger
+  or certified realized P&L is available.
+- Public UI shows the provisional value, cash/mark/fee breakdown, active BTC
+  position, order counts, and a per-order explanation with its quote inputs.
+  It no longer shows account-wide equity, AAPL or the research tables. Its
+  order count is explicitly “orders with fills”; this is not a count of
+  matched round trips or profitable trades. Vercel builds `846c39a` and
+  `165bdb1` tightened stale status to two existing five-minute heartbeats,
+  improved mobile readability and fixed a wrapped logo. Visual and accessibility
+  checks confirmed current data, order reasons and the corrected mark.
+- Current live rule remains `quote_cross_30s_v1`, BTC/USD only. The public page
+  check at 12:31 displayed 498 orders with fills, 1,095 broker fill rows, 228
+  buy orders, 270 sell orders and 159 order submissions on the UTC date; the
+  separate signed API snapshot at 12:31 contained 645 total bot order rows.
+  These counts describe active order flow and are not matched round trips.
+  This is already high enough activity for data collection; more order
+  frequency is not a substitute for evidence after spread and fees. The
+  current policy has no established edge. The selected order trigger was
+  6.030 bps, while the public Alpaca first-tier schedule lists 15 bps maker or
+  25 bps taker on each crypto transaction. Those are not a paired trade
+  comparison, but they show why the trigger is not itself proof of a profitable
+  round trip. Alpaca says crypto fees are charged in the credited asset and
+  posted end-of-day, so same-day totals can be incomplete ([fee schedule](https://docs.alpaca.markets/us/docs/crypto-fees),
+  [activities API](https://docs.alpaca.markets/us/docs/account-activities)).
+- Review gaps: the monitor still lacks matched entry/exit round trips with
+  per-trade realized P&L. Add these only after a chronological FIFO ledger
+  correctly assigns USD and BTC fees, proves the starting inventory and closes
+  the −0.000024511 BTC reconciliation gap. Do not widen symbols, size or rule
+  authority before causal executable-price replay beats the baseline after
+  spread, fees and latency. Candles/Murphy/Markov are descriptive or shadow
+  only; this 30-second Alpaca paper loop is not HFT.
+- Final verification after the last UI markup change: web tests 11/11, TypeScript
+  typecheck and Next production build passed. Earlier in this turn, Python
+  exporter suite passed 32/32. No order-authority code or order-size settings
+  changed.
+
 ## Next verified steps
 
-1. Deploy and verify the fee-aware view/exporter, then watch the next timer
-   cycle and public `generatedAt`. Confirm the private five-minute fee-cache
-   refresh works without interrupting telemetry.
-2. Reconcile the −0.000023918 BTC quantity gap against same-day fee postings
-   and verify the zero starting inventory from the first bot-owned fill. Do
-   not present provisional cash result as final net or realized P&L until
-   posted fees and closed lots reconcile.
-3. Keep the quote-cross rule unchanged for the moment. Capture candidate,
+1. Build a chronological, fee-currency-aware BTC lot ledger; prove starting
+   inventory and resolve the latest −0.000024511 BTC residual before displaying
+   realized P&L per round trip.
+2. Keep the quote-cross rule unchanged for the moment. Capture candidate,
    broker-accepted, fill and cancel counts separately; evaluate net executed
    outcomes with fees, spread and time-aligned quote data before changing its
    trigger or increasing order size.
-4. Keep candles, Murphy context and Markov shadow read-only until a frozen
+3. Keep candles, Murphy context and Markov shadow read-only until a frozen
    point-in-time evaluation beats a baseline on executable after-cost outcomes.
    Keep non-BTC Alpaca and Hyperliquid instruments outside order authority.
-5. Treat the payload limit as a scaling boundary. If the compact full-history
+4. Treat the payload limit as a scaling boundary. If the compact full-history
    snapshot approaches it again, split history into signed date pages rather
    than silently dropping older trades.

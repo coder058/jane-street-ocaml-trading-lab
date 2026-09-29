@@ -498,38 +498,50 @@ con el estado `P&L neto no conciliado`; no es P&L realizado ni después de fees.
 El dato del snapshot, no vigente para una fecha posterior, mostraba 0,000710987
 BTC y P&L no realizado del broker de +$0,03.
 
-**Cambio de producto publicado:** poner en primer plano solo la posición BTC,
-el resultado indicativo de fills más marca con un estado visible “P&L neto no
-conciliado”, los recuentos de ejecución y el historial por orden con el motivo
-y los precios observados. Quitar cifras de equity/AAPL, filas de fills de otros
-activos, tarjetas de últimas operaciones duplicadas, el gráfico horario y la
-tabla de quince pares de velas de la portada. Mantener el dato de vela/Markov
-en investigación versionada, no como una supuesta razón de órdenes.
+**Estado desplegado (29 sep 2026, 12:31 UTC):** `6c0d5e1` añade actividades
+`CFEE`/`FEE` al resultado provisional; `846c39a` reduce el stale timeout de 20
+a 10 minutos (dos heartbeats existentes) y mejora la lectura estrecha; `165bdb1`
+corrige el monograma del encabezado. Verifiqué la versión pública y el API.
+El snapshot de solo lectura `2026-09-29T12:31:21.917073Z` contiene 645 órdenes
+del bot con historial completo, 1.095 fills, 996 fees `CFEE`, fees USD de
+−$25,76 y −0,000281995 BTC en activo recibido. Las páginas están completas y
+las fees se atribuyen al bot porque todo el historial crypto de la cuenta
+corresponde a este bot. El flujo de cash de fills es −$26,100734; BTC marcado
+es $0,00; el resultado provisional tras fees USD publicadas es −$51,860734.
+La posición actual está plana, pero el inventario calculado desde fills y fees
+difiere del broker en −0,000024511 BTC; el journal conserva una ventana
+incompleta. No es P&L realizado ni conciliado.
+
+**Alcance de la pantalla publicada:** muestra ese resultado y su desglose,
+posición BTC, actividad de órdenes/fills y el motivo con las cotizaciones que
+originaron la orden seleccionada. Quita equity/AAPL, activos ajenos, tarjetas
+duplicadas de últimas operaciones, gráfico horario y tabla de velas de la
+portada. El historial cuenta órdenes con fills, no rondas completas; hoy no
+empareja entrada/salida ni enseña P&L neto realizado por ronda. Las velas,
+Pattern Forge/Murphy y Markov siguen siendo contexto de investigación, no
+motivo autorizado para enviar órdenes.
 
 **Puertas antes de ampliar estrategia:**
 
-1. Comprobar el siguiente ciclo del timer y la frescura pública de
-   `generatedAt`; ninguna página debe llamar actual a una foto antigua.
-2. Mostrar el resultado provisional con `CFEE`/`FEE` publicados y conservar la
-   alerta de fees pendientes. Conciliar el desfase actual de 0,000023918 BTC,
-   comprobar el saldo inicial plano y después calcular lotes cerrados.
-   No anunciar P&L neto ni transformar equity de cuenta en rentabilidad del bot.
-3. Medir por separado muestras elegibles, órdenes enviadas/aceptadas,
+1. Completar ledger de rondas por FIFO/posición, con fees en cada moneda,
+   saldos iniciales y cada fill cronológico. Resolver el desfase actual de
+   0,000024511 BTC. Hasta entonces, no anunciar P&L realizado/neto conciliado.
+2. Medir por separado muestras elegibles, órdenes enviadas/aceptadas,
    cancelaciones, fills parciales/completos y marca temporal de cada decisión.
-   Investigar por qué se autorizaron 149 candidatos y solo 148 órdenes ese día.
-4. Evaluar quote-cross, candles, Murphy y Markov con replay temporal causal,
+   El historial de órdenes no equivale a rondas cerradas.
+3. Evaluar quote-cross, candles, Murphy y Markov con replay temporal causal,
    precios bid/ask que habrían sido ejecutables y fees observadas. Dejar la
    política actual inalterada hasta conocer los resultados netos.
-5. Construir catálogo/cobertura multiactivo y replay HIP-3 como trabajo de
+4. Construir catálogo/cobertura multiactivo y replay HIP-3 como trabajo de
    captura aparte. No conectar acciones, FX-like, índices o energía al camino
    de órdenes mientras el adaptador, unidad y límites del contrato no estén
    validados.
-6. Llamar al sistema HFT solo después de publicar un benchmark reproducible de
+5. Llamar al sistema HFT solo después de publicar un benchmark reproducible de
    throughput, pérdida de eventos, p50/p95/p99 y latencia de red/ack. El
    heartbeat de velas no es HFT y más órdenes paper no son evidencia de edge.
 
-La mejora de pantalla y fees está implementada localmente; falta desplegarla y
-verificar el nuevo snapshot firmado. El experimento sigue siendo BTC paper
-automático con un disparador de cotizaciones simple y contexto multi-marco sin
-autoridad. Más activos, un modelo probabilístico, dinero de mayor tamaño o una
-etiqueta HFT deben esperar evidencia de replay after-cost y reconciliación.
+El paper bot continúa activo y ejecuta `quote_cross_30s_v1` solo en BTC/USD;
+el nuevo monitor recibe telemetría firmada y fresca. Ya existe actividad
+abundante para medir este disparador: más frecuencia/tamaño ahora amplía la
+exposición al coste antes de demostrar edge. Añadir P&L realizado por ronda y
+validar el replay after-cost va antes de más activos o autoridad de modelo.
