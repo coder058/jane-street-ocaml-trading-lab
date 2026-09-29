@@ -10,8 +10,9 @@ The Dublin VPS runs an OCaml paper order service and an Alpaca US market-data
 collector. It signs a sanitized broker and journal
 snapshot for Vercel; no Alpaca secret is sent to the website. The dashboard
 shows BTC bot orders, fills, position and decision traces. It excludes other
-account holdings and equity; bot net P&L remains unverified until fee and lot
-reconciliation is complete.
+account holdings and equity. The current result subtracts posted USD crypto
+fees and uses the broker BTC mark; it stays provisional until daily fee
+posting, BTC quantity and closed-lot reconciliation are complete.
 
 A second, read-only collector records public Hyperliquid HIP-3 prices, BBOs and
 1m candle updates for selected FX-like, index, energy and equity contracts.

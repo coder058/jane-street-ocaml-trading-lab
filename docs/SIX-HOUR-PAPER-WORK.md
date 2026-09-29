@@ -483,18 +483,63 @@ that rather than forcing more trades.
   history with one selected order's fill/quote/broker explanation. Unverified
   values stay labeled; no equity-wide P&L is shown.
 - Python exporter tests, web tests, TypeScript and Next production build pass.
-  The revised exporter has only been dry-run from `/tmp`; this note does not
-  claim that Vercel has received a fresh snapshot or that the new site is live.
+- Deployment was then completed: commit `1a12f3b` was pushed to `main`, the
+  compact exporter was installed on Dublin after backing up the prior copy,
+  and `jane-telemetry.service` uploaded a signed snapshot successfully. The
+  public API returned snapshot time `2026-09-29T11:30:48.873525Z` and API
+  generation time `2026-09-29T11:30:58.907Z`; the web page showed `FEED LIVE`,
+  630 unique BTC order rows, 1,079 unique fills, 192 retained journal events,
+  and no account-wide equity, AAPL positions, or market research payload.
+  The source journal is still marked incomplete. At that snapshot the page
+  displayed indicative fill-cash-plus-open-mark of -$25.94, explicitly marked
+  `NET P&L NOT RECONCILED`; it is not a realized or fee-adjusted result. The
+  open BTC position was 0.000710987 BTC, broker unrealized P&L +$0.03, as of
+  that snapshot only. The UI now presents a current monitor, not a profitability
+  claim.
+
+## Fee-aware result and simplified execution panel — 29 September 2026
+
+- A fresh read-only export at `2026-09-29T12:05:58.149297Z` completed all
+  Alpaca order, fill and fee pages. It found 642 BTC bot order rows, 1,093
+  fills, 996 `CFEE` fee activities and no `FEE` rows. Fee attribution passed:
+  the complete account crypto-order history contained no non-bot crypto order.
+  The source journal remained a rolling, incomplete 4,000-line window.
+- Posted fee activities totalled −$25.76 in USD and −0.000281995 BTC
+  (about −$23.55 at the fee activity prices). The current BTC position was
+  flat. Cumulative fill cash flow was −$26.056834544721153069, so the
+  provisional result after posted USD fees was −$51.816834544721153069. The
+  BTC-denominated fee is not subtracted a second time: its debit is reflected
+  in fills versus available broker inventory. The broker quantity still
+  differed from fills plus posted BTC fee activities by −0.000023918 BTC.
+  Same-day fees can post later; this is a provisional paper cash result, not a
+  certified closed-lot net P&L or evidence of live profitability.
+- The monitor now shows the provisional result and its three components,
+  separates USD fees from BTC fee units, exposes the quantity reconciliation
+  in a collapsed calculation detail, and labels the metric as provisional.
+  Its history count now says “orders with fills” because canceled orders can
+  contain partial executions. The exporter includes complete CFEE/FEE page
+  status and caches private fee activities for the existing five-minute
+  refresh cadence to avoid repeating the full fee pagination each telemetry
+  cycle. It keeps the Alpaca keys on Dublin; no fee activity rows or keys are
+  sent to Vercel.
+- The strategy, paper endpoint, order sizes, $500 BTC exposure limit and AAPL
+  safeguards were not changed. The public monitor remains a BTC-only paper
+  experiment using `quote_cross_30s_v1`; candles, Pattern Forge and Markov
+  still have no order authority.
+- Verification before deployment: Python suite 32/32, web suite 11/11,
+  TypeScript typecheck and Next production build passed. The signed exporter
+  dry run was 649,469 bytes, below the existing ingest limit, with complete
+  broker pages and fee attribution. No OCaml source changed.
 
 ## Next verified steps
 
-1. Commit the monitor/exporter change, publish the UI, install only the
-   read-only exporter update on Dublin and upload one signed snapshot. Verify
-   the public `generatedAt`, complete BTC history, deduplicated row counts,
-   current feed status and absence of AAPL/account-wide values.
-2. Add broker `CFEE`/`FEE` activities and a chronological BTC lot ledger. Do
-   not relabel the current mark result as net P&L until asset-denominated fees,
-   starting inventory, remaining quantity and closed fills reconcile.
+1. Deploy and verify the fee-aware view/exporter, then watch the next timer
+   cycle and public `generatedAt`. Confirm the private five-minute fee-cache
+   refresh works without interrupting telemetry.
+2. Reconcile the −0.000023918 BTC quantity gap against same-day fee postings
+   and verify the zero starting inventory from the first bot-owned fill. Do
+   not present provisional cash result as final net or realized P&L until
+   posted fees and closed lots reconcile.
 3. Keep the quote-cross rule unchanged for the moment. Capture candidate,
    broker-accepted, fill and cancel counts separately; evaluate net executed
    outcomes with fees, spread and time-aligned quote data before changing its

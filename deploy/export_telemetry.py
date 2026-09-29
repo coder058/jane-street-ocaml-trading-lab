@@ -16,6 +16,7 @@ import sys
 import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
 from cryptography.hazmat.primitives import serialization
@@ -25,6 +26,7 @@ ENV_PATH = Path("/etc/jsbot-paper.env")
 KEY_PATH = Path("/etc/jane-telemetry-ed25519.pem")
 STATE_DIR = Path("/home/ubuntu/jsbot-paper-state")
 SYNC_PATH = STATE_DIR / "telemetry-sync.json"
+FEE_CACHE_PATH = STATE_DIR / "crypto-fee-cache.json"
 EVENTS_PATH = STATE_DIR / "events.jsonl"
 BACKFILL_PATH = STATE_DIR / "events-bootstrap.jsonl"
 CAPTURE_DIR = STATE_DIR / "market-capture" / "us"
@@ -44,8 +46,8 @@ MAX_FILL_PAGES = 20
 # snapshot; older lines remain on the VPS and must be archived separately.
 MAX_JOURNAL_LINES = 4_000
 # GUESS: # UNCALIBRATED GUESS — a five-minute idle heartbeat makes the
-# read-only dashboard visibly current while limiting Blob writes. Measure
-# actual storage and transfer usage before tightening it further.
+# dashboard visibly current and bounds fee-history refreshes. Measure actual
+# storage, transfer, and API usage before tightening either cadence.
 HEARTBEAT_SECONDS = 5 * 60
 
 
@@ -71,7 +73,7 @@ def paper_get(path: str, credentials: dict[str, str]) -> object:
         return json.load(response)
 
 
-def broker_orders(credentials: dict[str, str]) -> tuple[list[dict[str, object]], bool]:
+def broker_orders(credentials: dict[str, str]) -> tuple[list[dict[str, object]], bool, bool]:
     orders: list[dict[str, object]] = []
     before: str | None = None
     complete = False
@@ -92,11 +94,13 @@ def broker_orders(credentials: dict[str, str]) -> tuple[list[dict[str, object]],
         before = last["id"]
     projected = []
     seen_order_ids: set[str] = set()
+    unique_orders = []
     for order in orders:
         order_id = order.get("id", "")
         if not isinstance(order_id, str) or not order_id or order_id in seen_order_ids:
             continue
         seen_order_ids.add(order_id)
+        unique_orders.append(order)
         client_order_id = order.get("client_order_id", "")
         symbol = order.get("symbol", "")
         # The public monitor is for this BTC bot. Keep every bot order and
@@ -114,7 +118,17 @@ def broker_orders(credentials: dict[str, str]) -> tuple[list[dict[str, object]],
             "filledQty": order.get("filled_qty", "0"),
             "submittedAt": order.get("submitted_at"),
         })
-    return projected, complete
+    # USD-denominated crypto fee rows do not carry an order ID or symbol. They
+    # can only be attributed to this BTC bot when every account crypto order is
+    # present in the complete history and belongs to this BTC bot.
+    crypto_orders_attributable = complete and all(
+        str(order.get("client_order_id", "")).startswith("jsbotbtc") and
+        str(order.get("symbol", "")) in ("BTCUSD", "BTC/USD")
+        for order in unique_orders
+        if order.get("asset_class") == "crypto" or
+        order.get("symbol") in ("BTCUSD", "BTC/USD")
+    )
+    return projected, complete, crypto_orders_attributable
 
 
 def broker_fills(credentials: dict[str, str], orders: list[dict[str, object]]) -> tuple[list[dict[str, object]], bool]:
@@ -154,6 +168,134 @@ def broker_fills(credentials: dict[str, str], orders: list[dict[str, object]]) -
         if activity_id and activity_id not in unique_fills:
             unique_fills[activity_id] = fill
     return list(unique_fills.values()), complete
+
+
+def broker_crypto_fees(credentials: dict[str, str],
+                       crypto_orders_attributable: bool, *,
+                       use_cache: bool = False,
+                       cache_path: Path = FEE_CACHE_PATH) -> dict[str, object]:
+    """Summarize posted crypto fees; do not invent per-order fee attribution."""
+    activities_by_id: dict[str, dict[str, object]] = {}
+    fetched_at: str | None = None
+    cached = None
+    if use_cache and cache_path.exists():
+        try:
+            candidate = json.loads(cache_path.read_text(encoding="utf-8"))
+            fetched_at = candidate.get("fetchedAt")
+            age = (datetime.now(timezone.utc) - datetime.fromisoformat(fetched_at.replace("Z", "+00:00"))).total_seconds()
+            # SOURCE: a future-dated cache indicates clock skew; do not trust it.
+            if (0 <= age < HEARTBEAT_SECONDS and candidate.get("pagesComplete") is True and
+                    isinstance(candidate.get("activities"), list)):
+                cached = candidate
+        except (OSError, ValueError, AttributeError, TypeError):
+            cached = None
+
+    pages_complete = True
+    if cached is not None:
+        activities_by_id = {row["id"]: row for row in cached["activities"]
+                            if isinstance(row, dict) and isinstance(row.get("id"), str)}
+    else:
+        for activity_type in ("CFEE", "FEE"):
+            token: str | None = None
+            activity_complete = False
+            for _ in range(MAX_FILL_PAGES):
+                query = {"direction": "desc", "page_size": str(FILL_PAGE_SIZE)}
+                if token:
+                    query["page_token"] = token
+                try:
+                    page = paper_get(
+                        f"/v2/account/activities/{activity_type}?" +
+                        urllib.parse.urlencode(query), credentials,
+                    )
+                except (OSError, ValueError):
+                    break
+                if not isinstance(page, list):
+                    break
+                malformed_page = False
+                for row in page:
+                    if not isinstance(row, dict) or not isinstance(row.get("id"), str):
+                        malformed_page = True
+                        break
+                    if activity_type == "CFEE" or "Coin Pair Transaction Fee" in str(row.get("description", "")):
+                        activities_by_id.setdefault(row["id"], row)
+                if malformed_page:
+                    break
+                if len(page) < FILL_PAGE_SIZE:
+                    activity_complete = True
+                    break
+                last = page[-1]
+                if not isinstance(last, dict) or not isinstance(last.get("id"), str) or token == last["id"]:
+                    break
+                token = last["id"]
+            pages_complete = pages_complete and activity_complete
+        if pages_complete:
+            fetched_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+            if use_cache:
+                try:
+                    cache_path.parent.mkdir(parents=True, exist_ok=True)
+                    temporary = cache_path.with_suffix(".tmp")
+                    cache_rows = [{key: row.get(key) for key in (
+                        "id", "activity_type", "description", "symbol", "qty", "price",
+                        "net_amount", "created_at")}
+                        for row in activities_by_id.values()]
+                    temporary.write_text(json.dumps({"fetchedAt": fetched_at,
+                                                     "pagesComplete": True,
+                                                     "activities": cache_rows}), encoding="utf-8")
+                    os.chmod(temporary, 0o600)  # SOURCE: fee-cache rows are private account activity.
+                    os.replace(temporary, cache_path)
+                except OSError:
+                    pass
+
+    # SOURCE: decimal zero is the additive identity for broker fee activity sums.
+    usd_net_amount = Decimal("0")
+    btc_fee_qty = Decimal("0")
+    btc_fee_value_usd = Decimal("0")
+    usd_rows = 0
+    btc_rows = 0
+    unclassified_rows = 0
+    relevant_rows = 0
+    last_activity_at: str | None = None
+    for row in activities_by_id.values():
+        description = str(row.get("description", ""))
+        if ("Coin Pair Transaction Fee" not in description and
+                row.get("activity_type") != "CFEE"):
+            continue
+        if "Coin Pair Transaction Fee" not in description:
+            unclassified_rows += 1
+            continue
+        relevant_rows += 1
+        created_at = row.get("created_at")
+        if isinstance(created_at, str) and (last_activity_at is None or created_at > last_activity_at):
+            last_activity_at = created_at
+        try:
+            if "(USD)" in description:
+                usd_net_amount += Decimal(str(row.get("net_amount", "0")))
+                usd_rows += 1
+            elif ("(Non USD)" in description and
+                  row.get("symbol") in ("BTCUSD", "BTC/USD")):
+                qty = Decimal(str(row.get("qty", "0")))
+                price = Decimal(str(row.get("price", "0")))
+                btc_fee_qty += qty
+                btc_fee_value_usd += qty * price
+                btc_rows += 1
+            else:
+                unclassified_rows += 1
+        except (InvalidOperation, ValueError):
+            unclassified_rows += 1
+
+    return {
+        "pagesComplete": pages_complete,
+        "attributedToBot": pages_complete and crypto_orders_attributable and unclassified_rows == 0,
+        "activityRows": relevant_rows,
+        "usdFeeRows": usd_rows,
+        "btcFeeRows": btc_rows,
+        "unclassifiedRows": unclassified_rows,
+        "usdNetAmount": str(usd_net_amount),
+        "btcFeeQty": str(btc_fee_qty),
+        "btcFeeValueAtActivityPriceUsd": str(btc_fee_value_usd),
+        "lastActivityAt": last_activity_at,
+        "fetchedAt": fetched_at,
+    }
 
 
 def journal() -> tuple[list[dict[str, str]], bool, list[dict[str, str]]]:
@@ -331,8 +473,9 @@ def significant_digest(events: list[dict[str, str]], service: dict[str, object],
               for order in document["orders"]]
     fills = [fill["id"] for fill in document["fills"]]
     # SOURCE: a changed public position projection needs one immediate signed upload.
-    payload = json.dumps({"projection": "position_pnl_v1", "service": service, "events": meaningful,
-                          "orders": orders, "fills": fills}, sort_keys=True)
+    payload = json.dumps({"projection": "paper_pnl_posted_fees_v1", "service": service, "events": meaningful,
+                          "orders": orders, "fills": fills,
+                          "cryptoFees": document["cryptoFees"]}, sort_keys=True)
     return hashlib.sha256(payload.encode()).hexdigest()
 
 
@@ -363,10 +506,13 @@ def market_research_state(path: Path = SHADOW_PATH) -> dict | None:
 
 def snapshot(credentials: dict[str, str], service: dict[str, object],
              events: list[dict[str, str]], journal_complete: bool,
-             decision_events: list[dict[str, str]]) -> dict[str, object]:
+             decision_events: list[dict[str, str]], *,
+             cache_fees: bool = False) -> dict[str, object]:
     positions = paper_get("/v2/positions", credentials)
-    orders, orders_complete = broker_orders(credentials)
+    orders, orders_complete, crypto_orders_attributable = broker_orders(credentials)
     fills, fills_complete = broker_fills(credentials, orders)
+    crypto_fees = broker_crypto_fees(credentials, crypto_orders_attributable,
+                                     use_cache=cache_fees)
     if not isinstance(positions, list):
         raise ValueError("Alpaca positions response has an unexpected shape")
     return {
@@ -381,6 +527,7 @@ def snapshot(credentials: dict[str, str], service: dict[str, object],
         "ordersComplete": orders_complete,
         "fills": fills,
         "fillsComplete": fills_complete,
+        "cryptoFees": crypto_fees,
         "decisionHistory": decision_history(decision_events, orders),
         "journal": public_journal(events, orders),
         "journalComplete": journal_complete,
@@ -399,7 +546,7 @@ def main() -> int:
     events, journal_complete, decision_events = journal()
     service = service_state(credentials)
     document = snapshot(credentials, service, events, journal_complete,
-                        decision_events)
+                        decision_events, cache_fees=not args.dry_run)
     digest = significant_digest(events, service, document)
     previous = {}
     if SYNC_PATH.exists():
@@ -418,7 +565,37 @@ def main() -> int:
         raise ValueError("telemetry exceeds the signed endpoint limit")
     if args.dry_run:
         five = document["analysis"]["fiveMinute"]
-        print(f"telemetry: dry run, mode={service['mode']}, {len(document['positions'])} positions, {len(document['orders'])} orders, {len(document['fills'])} fills, {len(events)} events, {len(document['decisionHistory'])} order decisions, complete_orders={document['ordersComplete']}, complete_fills={document['fillsComplete']}, complete_journal={journal_complete}, five_minute_trend={five['trend'] if five else 'unavailable'}, five_minute_last_bar={five['lastBarAt'] if five else 'unavailable'}, {len(body)} bytes")
+        fee_summary = document["cryptoFees"]
+        bot_ids = {order["id"] for order in document["orders"]
+                   if str(order.get("clientOrderId", "")).startswith("jsbotbtc")}
+        buy_notional = Decimal("0")
+        sell_notional = Decimal("0")
+        buy_qty = Decimal("0")
+        sell_qty = Decimal("0")
+        for fill in document["fills"]:
+            if fill.get("orderId") not in bot_ids or fill.get("symbol") not in ("BTCUSD", "BTC/USD"):
+                continue
+            qty = Decimal(str(fill["qty"]))
+            notional = qty * Decimal(str(fill["price"]))
+            if fill.get("side") == "buy":
+                buy_qty += qty
+                buy_notional += notional
+            elif fill.get("side") == "sell":
+                sell_qty += qty
+                sell_notional += notional
+        btc_positions = [position for position in document["positions"]
+                         if position.get("symbol") in ("BTCUSD", "BTC/USD")]
+        position_qty = Decimal(str(btc_positions[0]["qty"])) if btc_positions else Decimal("0")
+        position_mark = Decimal(str(btc_positions[0]["marketValue"])) if btc_positions else Decimal("0")
+        btc_fee_qty = Decimal(str(fee_summary["btcFeeQty"]))
+        quantity_residual = position_qty - (buy_qty - sell_qty + btc_fee_qty)
+        # SOURCE: Alpaca crypto fees debit the received asset; BTC fees are
+        # already reflected in broker inventory and must not be deducted twice.
+        provisional_after_posted_usd_fees = (
+            sell_notional - buy_notional + position_mark +
+            Decimal(str(fee_summary["usdNetAmount"]))
+        ) if fee_summary["attributedToBot"] else None
+        print(f"telemetry: dry run, snapshot_at={document['generatedAt']}, mode={service['mode']}, {len(document['positions'])} positions, {len(document['orders'])} orders, {len(document['fills'])} fills, {len(events)} events, {len(document['decisionHistory'])} order decisions, complete_orders={document['ordersComplete']}, complete_fills={document['fillsComplete']}, complete_fee_pages={fee_summary['pagesComplete']}, fee_fetched_at={fee_summary['fetchedAt']}, fee_activity_rows={fee_summary['activityRows']}, fee_usd_net={fee_summary['usdNetAmount']}, btc_fee_qty={fee_summary['btcFeeQty']}, fee_attributed_to_bot={fee_summary['attributedToBot']}, bot_fill_cash_delta={sell_notional - buy_notional}, broker_btc_mark={position_mark}, provisional_after_posted_usd_fees={provisional_after_posted_usd_fees}, btc_qty_residual={quantity_residual}, complete_journal={journal_complete}, five_minute_trend={five['trend'] if five else 'unavailable'}, five_minute_last_bar={five['lastBarAt'] if five else 'unavailable'}, {len(body)} bytes")
         return 0
     private_key = serialization.load_pem_private_key(KEY_PATH.read_bytes(), password=None)
     signature = base64.b64encode(private_key.sign(body)).decode("ascii")

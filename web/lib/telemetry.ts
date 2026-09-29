@@ -31,6 +31,20 @@ export type PaperPosition = {
   protected: boolean;
 };
 
+export type CryptoFeeSummary = {
+  pagesComplete: boolean;
+  attributedToBot: boolean;
+  activityRows: number;
+  usdFeeRows: number;
+  btcFeeRows: number;
+  unclassifiedRows: number;
+  usdNetAmount: string;
+  btcFeeQty: string;
+  btcFeeValueAtActivityPriceUsd: string;
+  lastActivityAt: string | null;
+  fetchedAt: string | null;
+};
+
 export type JournalEvent = {
   at: string;
   message: string;
@@ -67,6 +81,7 @@ export type PaperTelemetry = {
   ordersComplete: boolean;
   fills?: PaperFill[];
   fillsComplete?: boolean;
+  cryptoFees?: CryptoFeeSummary;
   decisionHistory?: Record<string, Record<string, string>>;
   journal: JournalEvent[];
   journalComplete: boolean;

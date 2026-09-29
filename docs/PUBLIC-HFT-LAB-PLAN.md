@@ -486,7 +486,19 @@ posición abierta de 0,001187307 BTC marcada a $99,72. La comprobación encontr�
 problemas reales: una UI congelada y un feed de actividad difícil de leer. El
 conteo de candidatos no equivale al de órdenes ni al de fills.
 
-**Cambio de producto en curso:** poner en primer plano solo la posición BTC,
+**Cambio de producto publicado:** el commit `1a12f3b` se desplegó en `main` y
+Vercel sirve la vista simplificada. El exporter compacto se instaló en Dublín y
+se subió una foto firmada; la API pública devolvió `telemetryGeneratedAt`
+`2026-09-29T11:30:48.873525Z` y `apiGeneratedAt` `2026-09-29T11:30:58.907Z`.
+La pantalla mostró `FEED LIVE`, 630 IDs de órdenes BTC únicos, 1.079 fills,
+192 eventos de journal retenidos, y ninguna equity global, posición AAPL ni
+tabla de investigación. El journal indica que su ventana está incompleta. La
+vista reportó -$25,94 como suma indicativa de cash de fills y marca abierta,
+con el estado `P&L neto no conciliado`; no es P&L realizado ni después de fees.
+El dato del snapshot, no vigente para una fecha posterior, mostraba 0,000710987
+BTC y P&L no realizado del broker de +$0,03.
+
+**Cambio de producto publicado:** poner en primer plano solo la posición BTC,
 el resultado indicativo de fills más marca con un estado visible “P&L neto no
 conciliado”, los recuentos de ejecución y el historial por orden con el motivo
 y los precios observados. Quitar cifras de equity/AAPL, filas de fills de otros
@@ -496,11 +508,12 @@ en investigación versionada, no como una supuesta razón de órdenes.
 
 **Puertas antes de ampliar estrategia:**
 
-1. Restablecer y comprobar publicación recurrente de una telemetría firmada y
-   compacta; ninguna página debe llamar actual a una foto antigua.
-2. Reconciliar `CFEE`/`FEE`, inventario inicial y compras/ventas con un ledger
-   BTC ordenado por fill. Hasta entonces, el monitor no debe anunciar P&L neto
-   cerrado ni transformar equity de cuenta en rentabilidad del bot.
+1. Comprobar el siguiente ciclo del timer y la frescura pública de
+   `generatedAt`; ninguna página debe llamar actual a una foto antigua.
+2. Mostrar el resultado provisional con `CFEE`/`FEE` publicados y conservar la
+   alerta de fees pendientes. Conciliar el desfase actual de 0,000023918 BTC,
+   comprobar el saldo inicial plano y después calcular lotes cerrados.
+   No anunciar P&L neto ni transformar equity de cuenta en rentabilidad del bot.
 3. Medir por separado muestras elegibles, órdenes enviadas/aceptadas,
    cancelaciones, fills parciales/completos y marca temporal de cada decisión.
    Investigar por qué se autorizaron 149 candidatos y solo 148 órdenes ese día.
@@ -515,8 +528,8 @@ en investigación versionada, no como una supuesta razón de órdenes.
    throughput, pérdida de eventos, p50/p95/p99 y latencia de red/ack. El
    heartbeat de velas no es HFT y más órdenes paper no son evidencia de edge.
 
-La primera mejora pública tiene que hacer visible lo que realmente existe:
-un experimento paper BTC automático que opera por un disparador de cotizaciones
-simple, captura contexto multi-marco sin autoridad, y todavía no ha conciliado
-rentabilidad neta. Más activos, un modelo probabilístico, dinero de mayor
-tamaño o una etiqueta HFT deben esperar a que los pasos 1–4 tengan evidencia.
+La mejora de pantalla y fees está implementada localmente; falta desplegarla y
+verificar el nuevo snapshot firmado. El experimento sigue siendo BTC paper
+automático con un disparador de cotizaciones simple y contexto multi-marco sin
+autoridad. Más activos, un modelo probabilístico, dinero de mayor tamaño o una
+etiqueta HFT deben esperar evidencia de replay after-cost y reconciliación.

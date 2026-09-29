@@ -113,6 +113,8 @@ export default function Home() {
   const fills = useMemo(() => t ? botFills(t) : [], [t]);
   const executions = useMemo(() => t ? botExecutions(t) : [], [t]);
   const accounting = useMemo(() => t ? botAccounting(t) : null, [t]);
+  const displayedBotResult = accounting?.markedResultAfterPostedFees ?? accounting?.markedResult ?? null;
+  const hasPostedFeeResult = accounting?.markedResultAfterPostedFees != null;
   const filtered = filter === "attempts" ? orders : executions.map(({ order }) => order)
     .filter((order) => filter === "trades" || order.side === filter);
   // GUESS: # UNCALIBRATED GUESS — ten initial rows keep the latest fills scannable.
@@ -156,15 +158,22 @@ export default function Home() {
 
       <section className="overview-grid" aria-label="Bot performance and position">
         <div className="pnl-panel">
-          <div className="panel-topline"><span className="eyebrow">BOT RESULT · BTC ONLY</span>
-            <span className="verification-badge">NET P&amp;L NOT RECONCILED</span></div>
-          <strong className={`pnl-value ${tone(accounting?.markedResult ?? null)}`}>
-            {accounting?.available ? signedMoney(accounting.markedResult) : "—"}</strong>
-          <p className="pnl-label">Fill cash flow + current BTC mark · indicative, fees unverified</p>
-          <div className="pnl-breakdown"><div><span>Buy fills</span><b>{accounting?.available ? money(accounting.buyNotional) : "—"}</b></div>
-            <div><span>Sell fills</span><b>{accounting?.available ? money(accounting.sellNotional) : "—"}</b></div>
-            <div><span>Open BTC mark</span><b>{accounting?.available ? money(accounting.marketValue) : "—"}</b></div></div>
-          <p className="pnl-note">This is not realized net profit. Fees and closed lots are not fully reconciled; AAPL and other account assets are excluded.</p>
+          <div className="panel-topline"><span className="eyebrow">BOT PAPER RESULT · BTC ONLY</span>
+            <span className="verification-badge">{hasPostedFeeResult ? "PROVISIONAL · POSTED FEES" : "FEES NOT INCLUDED"}</span></div>
+          <strong className={`pnl-value ${tone(displayedBotResult)}`}>
+            {accounting?.available ? signedMoney(displayedBotResult) : "—"}</strong>
+          <p className="pnl-label">{hasPostedFeeResult ? "Fill cash flow + BTC mark + posted USD crypto fees" : "Fill cash flow + BTC mark · before fees"}</p>
+          <div className="pnl-breakdown"><div><span>Fill cash flow</span><b>{accounting?.available ? signedMoney(accounting.cashDifference) : "—"}</b></div>
+            <div><span>Open BTC mark</span><b>{accounting?.available ? signedMoney(accounting.marketValue) : "—"}</b></div>
+            <div><span>Posted USD fees</span><b>{accounting?.available && accounting.postedUsdFees != null ? signedMoney(accounting.postedUsdFees) : "—"}</b></div></div>
+          <p className="pnl-note">Provisional marked result, not realized P&amp;L. Fees can post later; BTC and other account assets are excluded from this bot view.</p>
+          <details className="pnl-audit"><summary>Calculation and fee reconciliation</summary>
+            {accounting?.available && hasPostedFeeResult ? <>
+              <p>{money(accounting.sellNotional)} sells − {money(accounting.buyNotional)} buys + {money(accounting.marketValue)} open BTC mark + {signedMoney(accounting.postedUsdFees)} posted USD crypto fees = {signedMoney(accounting.markedResultAfterPostedFees)}.</p>
+              <p>{accounting.feeActivityRows} posted fee activities · fee data fetched {fullTime(t.cryptoFees?.fetchedAt)}. BTC-denominated fee: {quantity(accounting.postedBtcFeeQty)} BTC (about {signedMoney(accounting.postedBtcFeeValueUsd)} at activity prices); this BTC debit is reflected in the broker position and is not subtracted twice.</p>
+              <p>BTC quantity residual versus fills and posted BTC fees: {quantity(accounting.quantityResidual)} BTC. Same-day fees may still post; starting inventory and closed lots are not fully reconciled.</p>
+            </> : <p>Complete, attributable broker fee activity is not available in this snapshot; the result cannot yet include posted crypto fees.</p>}
+          </details>
         </div>
 
         <div className="position-panel">
@@ -180,8 +189,8 @@ export default function Home() {
       </section>
 
       <section className="stat-strip" aria-label="Execution summary">
-        <div><span>FILLED ORDERS · ALL TIME</span><strong>{executions.length}</strong><small>{fills.length} broker fill rows</small></div>
-        <div><span>ORDERS · {snapshotDay} UTC</span><strong>{ordersOnSnapshotDay}</strong><small>Snapshot day, not a live counter</small></div>
+        <div><span>ORDERS WITH FILLS · ALL TIME</span><strong>{executions.length}</strong><small>{fills.length} broker fill rows</small></div>
+        <div><span>ORDERS SUBMITTED · {snapshotDay} UTC</span><strong>{ordersOnSnapshotDay}</strong><small>Broker snapshot day, not a live counter</small></div>
         <div><span>ENTRIES / EXITS</span><strong>{buyCount} <i>/</i> {sellCount}</strong></div>
         <div><span>LAST EXECUTION</span><strong className="last-time">{fullTime(lastExecution)}</strong></div>
       </section>
@@ -194,11 +203,11 @@ export default function Home() {
         <div className="history-panel">
           <div className="history-heading"><div><span className="eyebrow">ALPACA PAPER · BROKER FILLS</span>
             <h1>Execution history</h1><p>One row per order. Partial fills are grouped; canceled attempts without fills are filtered out by default.</p></div>
-            <span className="history-total">{executions.length} FILLED ORDERS</span></div>
+            <span className="history-total">{executions.length} ORDERS WITH FILLS</span></div>
           <div className="filter-row" role="group" aria-label="Filter order history">
             {(["trades", "buy", "sell", "attempts"] as SideFilter[]).map((side) => <button key={side} type="button"
               className={filter === side ? "selected" : ""} onClick={() => { setFilter(side); setShowAll(false); setSelectedId(null); }}>
-              {side === "trades" ? "All fills" : side === "buy" ? "Entries" : side === "sell" ? "Exits" : "Attempts"}</button>)}
+              {side === "trades" ? "Executions" : side === "buy" ? "Entries" : side === "sell" ? "Exits" : "Attempts"}</button>)}
             <span>{filtered.length} rows</span></div>
           <div className="order-list">{visible.map((order) => {
             const executed = orderFillSummary(order, fills);

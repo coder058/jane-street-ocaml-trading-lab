@@ -6,6 +6,7 @@ import sys
 import json
 import tempfile
 import unittest
+from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import patch
 
@@ -13,6 +14,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "deploy"))
 
 from export_telemetry import (  # noqa: E402
     broker_fills,
+    broker_crypto_fees,
     broker_orders,
     decision_history,
     market_research_state,
@@ -90,9 +92,72 @@ class PublicProjectionTests(unittest.TestCase):
             {"id": "aapl", "client_order_id": "manual-stock", "symbol": "AAPL"},
         ]
         with patch("export_telemetry.paper_get", return_value=broker_page):
-            orders, complete = broker_orders({})
+            orders, complete, crypto_attributable = broker_orders({})
         self.assertTrue(complete)
+        self.assertFalse(crypto_attributable)
         self.assertEqual({order["id"] for order in orders}, {"bot", "manual-btc"})
+
+    def test_non_bot_crypto_order_blocks_fee_attribution(self) -> None:
+        broker_page = [
+            {"id": "bot", "client_order_id": "jsbotbtcbuy1", "symbol": "BTC/USD",
+             "asset_class": "crypto"},
+            {"id": "manual-eth", "client_order_id": "manual", "symbol": "ETH/USD",
+             "asset_class": "crypto"},
+        ]
+        with patch("export_telemetry.paper_get", return_value=broker_page):
+            _, complete, crypto_attributable = broker_orders({})
+        self.assertTrue(complete)
+        self.assertFalse(crypto_attributable)
+
+    def test_posted_crypto_fee_summary_keeps_currency_units_separate(self) -> None:
+        # SOURCE: synthetic amounts test unit handling only; they are not observed fees.
+        activities = [
+            {"id": "btc-fee", "description": "Coin Pair Transaction Fee (Non USD)",
+             "symbol": "BTCUSD", "qty": "-0.000025", "price": "100"},
+            {"id": "usd-fee", "description": "Coin Pair Transaction Fee (USD)",
+             "net_amount": "-0.25", "symbol": None},
+            {"id": "unrelated", "description": "Regulatory fee", "net_amount": "-1"},
+        ]
+        with patch("export_telemetry.paper_get", side_effect=[activities, []]):
+            summary = broker_crypto_fees({}, crypto_orders_attributable=True)
+        self.assertTrue(summary["pagesComplete"])
+        self.assertTrue(summary["attributedToBot"])
+        self.assertEqual(summary["activityRows"], 2)
+        self.assertEqual(summary["usdNetAmount"], "-0.25")
+        self.assertEqual(summary["btcFeeQty"], "-0.000025")
+        self.assertEqual(summary["btcFeeValueAtActivityPriceUsd"], "-0.002500")
+        self.assertEqual(summary["unclassifiedRows"], 0)
+
+    def test_unclassified_fee_or_incomplete_page_never_claims_attribution(self) -> None:
+        unclassified = [{"id": "other-crypto-fee",
+                         "description": "Coin Pair Transaction Fee (Non USD)",
+                         "symbol": "ETHUSD", "qty": "-0.01", "price": "100"}]
+        with patch("export_telemetry.paper_get", side_effect=[unclassified, []]):
+            summary = broker_crypto_fees({}, crypto_orders_attributable=True)
+        self.assertFalse(summary["attributedToBot"])
+        self.assertEqual(summary["unclassifiedRows"], 1)
+        with patch("export_telemetry.paper_get", side_effect=[OSError("unavailable"), []]):
+            unavailable = broker_crypto_fees({}, crypto_orders_attributable=True)
+        self.assertFalse(unavailable["pagesComplete"])
+        self.assertFalse(unavailable["attributedToBot"])
+
+    def test_recent_private_fee_cache_avoids_repeating_full_account_pagination(self) -> None:
+        # SOURCE: synthetic fee rows test cache behavior only; no broker data is used.
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "fee-cache.json"
+            path.write_text(json.dumps({
+                "fetchedAt": datetime.now(timezone.utc).isoformat(),
+                "pagesComplete": True,
+                "activities": [{"id": "fee", "activity_type": "CFEE",
+                                "description": "Coin Pair Transaction Fee (USD)",
+                                "net_amount": "-0.25", "created_at": "2026-09-29T00:00:00Z"}],
+            }), encoding="utf-8")
+            with patch("export_telemetry.paper_get", side_effect=AssertionError("cache should be used")):
+                summary = broker_crypto_fees({}, crypto_orders_attributable=True,
+                                             use_cache=True, cache_path=path)
+        self.assertTrue(summary["pagesComplete"])
+        self.assertEqual(summary["usdNetAmount"], "-0.25")
+        self.assertTrue(summary["attributedToBot"])
 
     def test_public_fills_only_follow_retained_orders(self) -> None:
         # SOURCE: synthetic fill quantities and prices exercise ID filtering only.

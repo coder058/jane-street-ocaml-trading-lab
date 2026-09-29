@@ -22,6 +22,31 @@ test("marked bot result excludes protected AAPL and remains indicative", () => {
   assert.equal(result.flat, false);
 });
 
+test("posted cash fees reduce marked result while BTC fees are not counted twice", () => {
+  const data = snapshot();
+  data.cryptoFees = { pagesComplete: true, attributedToBot: true,
+    activityRows: 2, usdFeeRows: 1, btcFeeRows: 1, unclassifiedRows: 0,
+    usdNetAmount: "-0.25", btcFeeQty: "-0.000025", fetchedAt: "2026-09-27T00:00:03Z",
+    btcFeeValueAtActivityPriceUsd: "-0.002500", lastActivityAt: "2026-09-27T00:00:02Z" };
+  const result = botAccounting(data);
+  assert.equal(Number(result.markedResult.toFixed(6)), 0.1);
+  assert.equal(result.postedUsdFees, -0.25);
+  assert.equal(Number(result.markedResultAfterPostedFees.toFixed(6)), -0.15);
+  assert.equal(Number(result.quantityResidual.toFixed(9)), 0);
+});
+
+test("fee-adjusted value stays unavailable when fee pages cannot be attributed", () => {
+  const data = snapshot();
+  data.cryptoFees = { pagesComplete: true, attributedToBot: false,
+    activityRows: 2, usdFeeRows: 1, btcFeeRows: 1, unclassifiedRows: 0,
+    usdNetAmount: "-0.25", btcFeeQty: "-0.000025", fetchedAt: "2026-09-27T00:00:03Z",
+    btcFeeValueAtActivityPriceUsd: "-0.002500", lastActivityAt: null };
+  const result = botAccounting(data);
+  assert.equal(result.available, true);
+  assert.equal(result.markedResultAfterPostedFees, null);
+  assert.equal(Number(result.markedResult.toFixed(6)), 0.1);
+});
+
 test("incomplete or external BTC history hides the result", () => {
   const incomplete = snapshot();
   incomplete.fillsComplete = false;

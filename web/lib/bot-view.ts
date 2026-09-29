@@ -8,6 +8,12 @@ export type BotAccounting = {
   marketValue: number;
   cashDifference: number;
   markedResult: number | null;
+  postedUsdFees: number | null;
+  markedResultAfterPostedFees: number | null;
+  postedBtcFeeQty: number | null;
+  postedBtcFeeValueUsd: number | null;
+  quantityResidual: number | null;
+  feeActivityRows: number | null;
   reason: string | null;
 };
 
@@ -33,7 +39,10 @@ export function botFills(t: PaperTelemetry): PaperFill[] {
 export function botAccounting(t: PaperTelemetry): BotAccounting {
   const unavailable = (reason: string): BotAccounting => ({
     available: false, flat: false, buyNotional: 0, sellNotional: 0,
-    marketValue: 0, cashDifference: 0, markedResult: null, reason,
+    marketValue: 0, cashDifference: 0, markedResult: null,
+    postedUsdFees: null, markedResultAfterPostedFees: null,
+    postedBtcFeeQty: null, postedBtcFeeValueUsd: null,
+    quantityResidual: null, feeActivityRows: null, reason,
   });
   if (!t.ordersComplete || !t.fillsComplete || !Array.isArray(t.fills))
     return unavailable("Broker order or fill history is incomplete.");
@@ -51,19 +60,45 @@ export function botAccounting(t: PaperTelemetry): BotAccounting {
   const ids = new Set(botOrders(t).map((order) => order.id));
   let buyNotional = 0;
   let sellNotional = 0;
+  let buyQty = 0;
+  let sellQty = 0;
   for (const fill of botFills(t)) {
     const qty = Number(fill.qty);
     const price = Number(fill.price);
     if (!ids.has(fill.orderId) || !Number.isFinite(qty) || !Number.isFinite(price) || qty <= 0 || price <= 0)
       return unavailable("A bot fill cannot be matched to a valid broker order.");
-    if (fill.side === "buy") buyNotional += qty * price;
-    else if (fill.side === "sell") sellNotional += qty * price;
+    if (fill.side === "buy") { buyNotional += qty * price; buyQty += qty; }
+    else if (fill.side === "sell") { sellNotional += qty * price; sellQty += qty; }
     else return unavailable("A bot fill has an unexpected side.");
   }
   const cashDifference = sellNotional - buyNotional;
+  const fees = t.cryptoFees;
+  const feeNumbers = fees ? [Number(fees.usdNetAmount), Number(fees.btcFeeQty),
+    Number(fees.btcFeeValueAtActivityPriceUsd)] : [];
+  // SOURCE: unclassified crypto fees prevent assigning account-wide fees to this bot.
+  const feeDataValid = !!fees && fees.pagesComplete && fees.attributedToBot &&
+    fees.unclassifiedRows === 0 && feeNumbers.every(Number.isFinite) &&
+    typeof fees.fetchedAt === "string" && Number.isFinite(Date.parse(fees.fetchedAt)) &&
+    Number.isInteger(fees.activityRows) &&
+    fees.activityRows >= 0 && fees.usdFeeRows >= 0 && fees.btcFeeRows >= 0;
+  const postedUsdFees = feeDataValid ? feeNumbers[0] : null;
+  const postedBtcFeeQty = feeDataValid ? feeNumbers[1] : null;
+  const postedBtcFeeValueUsd = feeDataValid ? feeNumbers[2] : null;
+  // SOURCE: Alpaca crypto fees debit the received asset; posted BTC debits
+  // reflected in broker inventory must not be subtracted from the mark twice.
+  const expectedPositionQty = feeDataValid
+    ? buyQty - sellQty + (postedBtcFeeQty ?? 0)
+    : buyQty - sellQty;
   return {
     available: true, flat: quantity === 0, buyNotional, sellNotional,
     marketValue, cashDifference, markedResult: cashDifference + marketValue,
+    postedUsdFees,
+    markedResultAfterPostedFees: postedUsdFees == null
+      ? null : cashDifference + marketValue + postedUsdFees,
+    postedBtcFeeQty,
+    postedBtcFeeValueUsd,
+    quantityResidual: quantity - expectedPositionQty,
+    feeActivityRows: feeDataValid ? fees.activityRows : null,
     reason: null,
   };
 }
