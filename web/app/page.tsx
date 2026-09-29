@@ -123,8 +123,10 @@ export default function Home() {
   const btcPosition = t?.positions.find((position) => !position.protected &&
     (position.symbol === "BTCUSD" || position.symbol === "BTC/USD"));
   const openPnl = btcPosition?.unrealizedPl == null ? null : Number(btcPosition.unrealizedPl);
-  // GUESS: # UNCALIBRATED GUESS — stale display threshold only; it is not an uptime or trading rule.
-  const fresh = !!t && Date.now() - Date.parse(t.generatedAt) < 20 * 60_000;
+  // SOURCE: deploy/export_telemetry.py HEARTBEAT_SECONDS is five minutes;
+  // allow two heartbeat intervals before marking a broker snapshot stale.
+  const snapshotFreshnessMs = 2 * 5 * 60_000;
+  const fresh = !!t && Date.now() - Date.parse(t.generatedAt) < snapshotFreshnessMs;
   const healthy = !!t && fresh && t.service.active && t.capture?.active;
   const buyCount = executions.filter(({ order }) => order.side === "buy").length;
   const sellCount = executions.filter(({ order }) => order.side === "sell").length;
