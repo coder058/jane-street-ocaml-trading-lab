@@ -138,7 +138,7 @@ export default function Home() {
   return <main className="dashboard">
     <header className="topbar">
       <a className="brand" href="#top" aria-label="OCaml Paper Market Lab home">
-        <span className="brand-mark">O<span>·</span>C</span>
+        <span className="brand-mark">OC</span>
         <span><strong>OCaml Paper Market Lab</strong><small>Independent execution research</small></span>
       </a>
       <div className="topbar-right"><span className="venue-tag">BTC/USD <i>ALPACA PAPER</i></span>
