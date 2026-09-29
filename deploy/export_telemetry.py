@@ -91,19 +91,28 @@ def broker_orders(credentials: dict[str, str]) -> tuple[list[dict[str, object]],
             raise ValueError("Alpaca order pagination has no last ID")
         before = last["id"]
     projected = []
+    seen_order_ids: set[str] = set()
     for order in orders:
+        order_id = order.get("id", "")
+        if not isinstance(order_id, str) or not order_id or order_id in seen_order_ids:
+            continue
+        seen_order_ids.add(order_id)
+        client_order_id = order.get("client_order_id", "")
+        symbol = order.get("symbol", "")
+        # The public monitor is for this BTC bot. Keep every bot order and
+        # every other BTC order so attribution can fail closed; do not publish
+        # unrelated account activity such as the protected AAPL position.
+        if not (str(client_order_id).startswith("jsbotbtc") or
+                symbol in ("BTCUSD", "BTC/USD")):
+            continue
         projected.append({
-            "id": order.get("id", ""),
-            "clientOrderId": order.get("client_order_id", ""),
-            "symbol": order.get("symbol", ""),
+            "id": order_id,
+            "clientOrderId": client_order_id,
+            "symbol": symbol,
             "side": order.get("side", ""),
-            "type": order.get("type", ""),
             "status": order.get("status", ""),
-            "qty": order.get("qty"),
             "filledQty": order.get("filled_qty", "0"),
-            "filledAvgPrice": order.get("filled_avg_price"),
             "submittedAt": order.get("submitted_at"),
-            "filledAt": order.get("filled_at"),
         })
     return projected, complete
 
@@ -133,15 +142,18 @@ def broker_fills(credentials: dict[str, str], orders: list[dict[str, object]]) -
     projected = [{
         "id": fill.get("id", ""),
         "orderId": fill.get("order_id", ""),
-        "clientOrderId": by_order_id.get(fill.get("order_id"), ""),
         "symbol": fill.get("symbol", ""),
         "side": fill.get("side", ""),
-        "type": fill.get("type", ""),
         "qty": fill.get("qty", "0"),
         "price": fill.get("price", "0"),
         "transactionTime": fill.get("transaction_time"),
-    } for fill in fills]
-    return projected, complete
+    } for fill in fills if fill.get("order_id") in by_order_id]
+    unique_fills: dict[str, dict[str, object]] = {}
+    for fill in projected:
+        activity_id = str(fill.get("id", ""))
+        if activity_id and activity_id not in unique_fills:
+            unique_fills[activity_id] = fill
+    return list(unique_fills.values()), complete
 
 
 def journal() -> tuple[list[dict[str, str]], bool, list[dict[str, str]]]:
@@ -165,6 +177,27 @@ def journal() -> tuple[list[dict[str, str]], bool, list[dict[str, str]]]:
     return rows[-MAX_JOURNAL_LINES:], complete, decision_rows
 
 
+def public_journal(events: list[dict[str, str]],
+                   orders: list[dict[str, object]]) -> list[dict[str, str]]:
+    """Keep only broker lifecycle rows that explain a retained bot order."""
+    bot_client_ids = {
+        str(order.get("clientOrderId", "")) for order in orders
+        if str(order.get("clientOrderId", "")).startswith("jsbotbtc")
+    }
+    lifecycle_prefixes = ("SEND ", "ACK ", "reconcile ", "REJECTED ",
+                          "UNCERTAIN ", "HALT ")
+    selected = []
+    for event in events:
+        message = event["message"]
+        if not message.startswith(lifecycle_prefixes):
+            continue
+        order_id = next((token[3:] for token in message.split()
+                         if token.startswith("id=")), "")
+        if order_id in bot_client_ids:
+            selected.append(event)
+    return selected
+
+
 def decision_history(events: list[dict[str, str]],
                      orders: list[dict[str, object]]) -> dict[str, dict[str, str]]:
     """Join logged quote decisions to broker order IDs without guessing proximity."""
@@ -182,8 +215,7 @@ def decision_history(events: list[dict[str, str]],
         suffix = "".join(character for character in quote_time if character.isalnum())
         if message.startswith("HOT_DECISION "):
             decisions[suffix] = {key: fields[key] for key in (
-                "quote_time", "policy", "receive_to_decision_ms", "trend",
-                "context_frame", "context_bar", "probability", "reference_bid",
+                "quote_time", "policy", "receive_to_decision_ms", "trend", "reference_bid",
                 "reference_ask", "current_bid", "current_ask", "cross_direction",
                 "trigger_move_bps") if key in fields}
         else:
@@ -218,6 +250,20 @@ def service_state(credentials: dict[str, str]) -> dict[str, object]:
         check=False,
     ).returncode == 0
     return {"active": active, "mode": mode, "captureActive": capture_active}
+
+
+def public_positions(positions: list[dict[str, object]]) -> list[dict[str, object]]:
+    """Publish the BTC position only; other account holdings are private scope."""
+    return [{
+        "symbol": str(position.get("symbol", "")),
+        "qty": str(position.get("qty", "")),
+        "side": str(position.get("side", "")),
+        "avgEntryPrice": str(position.get("avg_entry_price", "")),
+        "marketValue": position.get("market_value"),
+        "currentPrice": position.get("current_price"),
+        "unrealizedPl": position.get("unrealized_pl"),
+        "protected": False,
+    } for position in positions if position.get("symbol") in ("BTCUSD", "BTC/USD")]
 
 
 def capture_state(service: dict[str, object]) -> dict[str, object]:
@@ -318,12 +364,11 @@ def market_research_state(path: Path = SHADOW_PATH) -> dict | None:
 def snapshot(credentials: dict[str, str], service: dict[str, object],
              events: list[dict[str, str]], journal_complete: bool,
              decision_events: list[dict[str, str]]) -> dict[str, object]:
-    account = paper_get("/v2/account", credentials)
     positions = paper_get("/v2/positions", credentials)
     orders, orders_complete = broker_orders(credentials)
     fills, fills_complete = broker_fills(credentials, orders)
-    if not isinstance(account, dict) or not isinstance(positions, list):
-        raise ValueError("Alpaca account or positions response has an unexpected shape")
+    if not isinstance(positions, list):
+        raise ValueError("Alpaca positions response has an unexpected shape")
     return {
         "version": 1,
         "generatedAt": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
@@ -331,30 +376,13 @@ def snapshot(credentials: dict[str, str], service: dict[str, object],
         "service": service,
         "capture": capture_state(service),
         "analysis": analysis_state(events),
-        "marketResearch": market_research_state(),
-        "account": {
-            "equity": str(account.get("equity", "")),
-            "cash": str(account.get("cash", "")),
-            "buyingPower": str(account.get("buying_power", "")),
-        },
-        "positions": [{
-            "symbol": str(position.get("symbol", "")),
-            "qty": str(position.get("qty", "")),
-            "side": str(position.get("side", "")),
-            "avgEntryPrice": str(position.get("avg_entry_price", "")),
-            "marketValue": position.get("market_value"),
-            "costBasis": position.get("cost_basis"),
-            "currentPrice": position.get("current_price"),
-            "unrealizedPl": position.get("unrealized_pl"),
-            "unrealizedPlpc": position.get("unrealized_plpc"),
-            "protected": position.get("symbol") not in ("BTCUSD", "BTC/USD"),
-        } for position in positions],
+        "positions": public_positions(positions),
         "orders": orders,
         "ordersComplete": orders_complete,
         "fills": fills,
         "fillsComplete": fills_complete,
         "decisionHistory": decision_history(decision_events, orders),
-        "journal": events,
+        "journal": public_journal(events, orders),
         "journalComplete": journal_complete,
     }
 

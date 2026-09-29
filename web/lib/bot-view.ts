@@ -15,12 +15,18 @@ const botOrder = (id: string) => id.startsWith("jsbotbtc");
 const btc = (symbol: string) => symbol === "BTCUSD" || symbol === "BTC/USD";
 
 export function botOrders(t: PaperTelemetry): PaperOrder[] {
-  return t.orders.filter((order) => botOrder(order.clientOrderId) && btc(order.symbol))
+  const unique = new Map<string, PaperOrder>();
+  for (const order of t.orders) {
+    if (botOrder(order.clientOrderId) && btc(order.symbol) && !unique.has(order.id))
+      unique.set(order.id, order);
+  }
+  return [...unique.values()]
     .sort((left, right) => (right.submittedAt ?? "").localeCompare(left.submittedAt ?? ""));
 }
 
 export function botFills(t: PaperTelemetry): PaperFill[] {
-  return (t.fills ?? []).filter((fill) => botOrder(fill.clientOrderId) && btc(fill.symbol))
+  const botOrderIds = new Set(botOrders(t).map((order) => order.id));
+  return (t.fills ?? []).filter((fill) => botOrderIds.has(fill.orderId) && btc(fill.symbol))
     .sort((left, right) => (right.transactionTime ?? "").localeCompare(left.transactionTime ?? ""));
 }
 

@@ -468,3 +468,55 @@ microestructura, ejecución y modelos; la rentabilidad puede seguir sin aparecer
 Los backtests antiguos se citan como registros históricos hasta reproducir sus
 salidas. Paper/testnet y benchmarks locales no prueban rentabilidad live ni una
 ventaja de latencia frente a participantes profesionales.
+
+## Revisión del monitor y prioridad siguiente — 29 de septiembre de 2026
+
+**Incidente observado:** a las 10:58 UTC el dashboard público conservaba una
+foto del 28 de septiembre a las 12:47:29 UTC. El ejecutor y el feed Alpaca de
+Dublín estaban activos, pero el timer de telemetría fallaba porque el JSON
+firmado superaba 1 MiB. Por eso el visitante veía un sistema parado aunque el
+paper bot y el colector seguían procesando el mercado.
+
+**Actividad leída del broker, no inferida de la web:** el snapshot de solo
+lectura de las 11:15 UTC contenía 148 órdenes BTC del bot enviadas desde las
+00:00 UTC, 602 muestras quote-cross (149 candidatas, 453 no candidatas) y una
+posición abierta de 0,001187307 BTC marcada a $99,72. La comprobación encontró
+6 filas de órdenes repetidas en 635 filas descargadas; los IDs únicos eran
+629. Por tanto, la lectura anterior de “no está haciendo trades” mezclaba dos
+problemas reales: una UI congelada y un feed de actividad difícil de leer. El
+conteo de candidatos no equivale al de órdenes ni al de fills.
+
+**Cambio de producto en curso:** poner en primer plano solo la posición BTC,
+el resultado indicativo de fills más marca con un estado visible “P&L neto no
+conciliado”, los recuentos de ejecución y el historial por orden con el motivo
+y los precios observados. Quitar cifras de equity/AAPL, filas de fills de otros
+activos, tarjetas de últimas operaciones duplicadas, el gráfico horario y la
+tabla de quince pares de velas de la portada. Mantener el dato de vela/Markov
+en investigación versionada, no como una supuesta razón de órdenes.
+
+**Puertas antes de ampliar estrategia:**
+
+1. Restablecer y comprobar publicación recurrente de una telemetría firmada y
+   compacta; ninguna página debe llamar actual a una foto antigua.
+2. Reconciliar `CFEE`/`FEE`, inventario inicial y compras/ventas con un ledger
+   BTC ordenado por fill. Hasta entonces, el monitor no debe anunciar P&L neto
+   cerrado ni transformar equity de cuenta en rentabilidad del bot.
+3. Medir por separado muestras elegibles, órdenes enviadas/aceptadas,
+   cancelaciones, fills parciales/completos y marca temporal de cada decisión.
+   Investigar por qué se autorizaron 149 candidatos y solo 148 órdenes ese día.
+4. Evaluar quote-cross, candles, Murphy y Markov con replay temporal causal,
+   precios bid/ask que habrían sido ejecutables y fees observadas. Dejar la
+   política actual inalterada hasta conocer los resultados netos.
+5. Construir catálogo/cobertura multiactivo y replay HIP-3 como trabajo de
+   captura aparte. No conectar acciones, FX-like, índices o energía al camino
+   de órdenes mientras el adaptador, unidad y límites del contrato no estén
+   validados.
+6. Llamar al sistema HFT solo después de publicar un benchmark reproducible de
+   throughput, pérdida de eventos, p50/p95/p99 y latencia de red/ack. El
+   heartbeat de velas no es HFT y más órdenes paper no son evidencia de edge.
+
+La primera mejora pública tiene que hacer visible lo que realmente existe:
+un experimento paper BTC automático que opera por un disparador de cotizaciones
+simple, captura contexto multi-marco sin autoridad, y todavía no ha conciliado
+rentabilidad neta. Más activos, un modelo probabilístico, dinero de mayor
+tamaño o una etiqueta HFT deben esperar a que los pasos 1–4 tengan evidencia.

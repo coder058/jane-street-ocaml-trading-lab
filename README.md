@@ -9,9 +9,9 @@ Jane Street or Alpaca. It does not claim a profitable strategy.
 The Dublin VPS runs an OCaml paper order service and an Alpaca US market-data
 collector. It signs a sanitized broker and journal
 snapshot for Vercel; no Alpaca secret is sent to the website. The dashboard
-shows actual paper orders, the pre-existing AAPL position, feed health, and
-Pattern Forge closed-candle context. The paper account's equity includes AAPL
-and is **not** a performance result for this bot.
+shows BTC bot orders, fills, position and decision traces. It excludes other
+account holdings and equity; bot net P&L remains unverified until fee and lot
+reconciliation is complete.
 
 A second, read-only collector records public Hyperliquid HIP-3 prices, BBOs and
 1m candle updates for selected FX-like, index, energy and equity contracts.
@@ -66,7 +66,8 @@ This is market-data collection, not a claim that the OCaml executor is HFT.
 - `--research-once` reads closed BTC, ETH and SOL candles from Pattern Forge
   for descriptive 5m, 1h and 1d context. This path cannot authorize orders.
 - Raw captures stay on Dublin; the public monitor receives signed summaries,
-  broker orders, fill activities and selected journal events.
+  BTC orders/fills and selected per-order journal events. Account-wide balances
+  and unrelated holdings stay out of the public projection.
 - `web/` contains the Vercel paper monitor. Dublin exports broker snapshots
   and the journal with Ed25519 signatures; Vercel never receives Alpaca keys.
 

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { botAccounting, botExecutions, decisionForOrder, orderDisplayStatus, orderFillSummary,
+import { botAccounting, botExecutions, botOrders, decisionForOrder, orderDisplayStatus, orderFillSummary,
   quoteEvidence, reasonForOrder } from "../lib/bot-view.ts";
 
 // SOURCE: synthetic values test accounting guards and partial-fill display only.
@@ -45,6 +45,14 @@ test("partial canceled order is not presented as an empty cancellation", () => {
   data.orders.push({ id: "empty", clientOrderId: "jsbotbtcsell20260927T000002Z", symbol: "BTCUSD",
     side: "sell", status: "canceled", filledQty: "0" });
   assert.equal(botExecutions(data).length, 1);
+});
+
+test("duplicate broker pagination rows do not duplicate displayed executions", () => {
+  const data = snapshot();
+  data.orders.push({ ...data.orders[0] });
+  assert.equal(botOrders(data).length, 1);
+  assert.equal(botExecutions(data).length, 1);
+  assert.equal(botExecutions(data)[0].fill.notional, 1);
 });
 
 test("decision links by encoded quote time, not nearest journal row", () => {

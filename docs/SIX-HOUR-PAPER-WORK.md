@@ -449,3 +449,59 @@ Keep the hardcoded paper endpoint, AAPL protection, durable pending journal,
 $100 baseline and $500 BTC exposure ceiling. Paper fills do not establish a
 profitable live strategy; if evidence stays negative or inconclusive, report
 that rather than forcing more trades.
+
+## Monitor diagnosis and redesign — 29 September 2026
+
+- At 10:58 UTC the Vercel page still showed a signed snapshot generated on
+  28 September at 12:47:29 UTC. Dublin's paper executor and Alpaca capture
+  were active; the telemetry timer was retrying a failed exporter. The exact
+  exception was `telemetry exceeds the signed endpoint limit` (1 MiB), so the
+  page had frozen while the OCaml service continued processing quotes.
+- A read-only broker snapshot at 11:15 UTC showed `PAPER_ORDER`, live capture,
+  148 bot orders submitted since 00:00 UTC, and 602 `HOT_SAMPLE` events that
+  day: 149 had `candidate=true` and 453 had `candidate=false`. This is order
+  activity under a quote-cross trigger, not Murphy/Markov probability trading.
+  The latest observed BTC position was 0.001187307 BTC, marked at $99.72. The
+  figure is point-in-time and is not a bot P&L result.
+- The broker pagination response contained six repeated bot order rows across
+  635 rows; 629 IDs were unique. Fill activity IDs were unique. The exporter
+  now deduplicates orders/fills by broker ID, keeps the complete BTC order
+  history and its retained decision reasons, and omits account-wide equity,
+  non-BTC orders/fills, AAPL details and the unused candle table from public
+  telemetry.
+- The changed exporter passed a broker read-only dry run after 11:15 UTC with
+  complete order and fill pagination: 630 BTC-relevant orders, 1,079 fills,
+  605 decision traces (25 orders had no matching retained decision), and a
+  636,901-byte signed payload. The retained source
+  journal still reports incomplete because the exporter reads its latest
+  4,000-line window; per-order traces remain available only where captured.
+  No data was uploaded by this dry run.
+- The UI changes remove the duplicated latest-trade cards, hourly activity
+  chart, multi-pair candle table and repeated strategy prose. The first view
+  now prioritizes the bot's indicative fill-cash-plus-mark, a prominent
+  unreconciled-net-P&L status, BTC position, execution counts and an order
+  history with one selected order's fill/quote/broker explanation. Unverified
+  values stay labeled; no equity-wide P&L is shown.
+- Python exporter tests, web tests, TypeScript and Next production build pass.
+  The revised exporter has only been dry-run from `/tmp`; this note does not
+  claim that Vercel has received a fresh snapshot or that the new site is live.
+
+## Next verified steps
+
+1. Commit the monitor/exporter change, publish the UI, install only the
+   read-only exporter update on Dublin and upload one signed snapshot. Verify
+   the public `generatedAt`, complete BTC history, deduplicated row counts,
+   current feed status and absence of AAPL/account-wide values.
+2. Add broker `CFEE`/`FEE` activities and a chronological BTC lot ledger. Do
+   not relabel the current mark result as net P&L until asset-denominated fees,
+   starting inventory, remaining quantity and closed fills reconcile.
+3. Keep the quote-cross rule unchanged for the moment. Capture candidate,
+   broker-accepted, fill and cancel counts separately; evaluate net executed
+   outcomes with fees, spread and time-aligned quote data before changing its
+   trigger or increasing order size.
+4. Keep candles, Murphy context and Markov shadow read-only until a frozen
+   point-in-time evaluation beats a baseline on executable after-cost outcomes.
+   Keep non-BTC Alpaca and Hyperliquid instruments outside order authority.
+5. Treat the payload limit as a scaling boundary. If the compact full-history
+   snapshot approaches it again, split history into signed date pages rather
+   than silently dropping older trades.

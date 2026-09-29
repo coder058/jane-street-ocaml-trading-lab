@@ -7,10 +7,18 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "deploy"))
 
-from export_telemetry import decision_history, market_research_state  # noqa: E402
+from export_telemetry import (  # noqa: E402
+    broker_fills,
+    broker_orders,
+    decision_history,
+    market_research_state,
+    public_journal,
+    public_positions,
+)
 
 
 class DecisionHistoryTests(unittest.TestCase):
@@ -61,6 +69,59 @@ class DecisionHistoryTests(unittest.TestCase):
         self.assertEqual(history["one"]["cross_direction"], "up")
         self.assertEqual(history["one"]["trigger_move_bps"], "10.00000000")
         self.assertNotIn("other", str(history))
+
+
+class PublicProjectionTests(unittest.TestCase):
+    def test_public_positions_exclude_non_bot_holdings(self) -> None:
+        # SOURCE: synthetic amounts only identify which account row is omitted.
+        positions = [
+            {"symbol": "BTCUSD", "qty": "0.01", "market_value": "500"},
+            {"symbol": "AAPL", "qty": "10", "market_value": "3500"},
+        ]
+        projection = public_positions(positions)
+        self.assertEqual([row["symbol"] for row in projection], ["BTCUSD"])
+        self.assertNotIn("3500", json.dumps(projection))
+
+    def test_public_orders_keep_bot_and_external_btc_only(self) -> None:
+        broker_page = [
+            {"id": "bot", "client_order_id": "jsbotbtcbuy1", "symbol": "BTC/USD"},
+            {"id": "bot", "client_order_id": "jsbotbtcbuy1", "symbol": "BTC/USD"},
+            {"id": "manual-btc", "client_order_id": "manual", "symbol": "BTCUSD"},
+            {"id": "aapl", "client_order_id": "manual-stock", "symbol": "AAPL"},
+        ]
+        with patch("export_telemetry.paper_get", return_value=broker_page):
+            orders, complete = broker_orders({})
+        self.assertTrue(complete)
+        self.assertEqual({order["id"] for order in orders}, {"bot", "manual-btc"})
+
+    def test_public_fills_only_follow_retained_orders(self) -> None:
+        # SOURCE: synthetic fill quantities and prices exercise ID filtering only.
+        broker_page = [
+            {"id": "fill-bot", "order_id": "bot", "symbol": "BTC/USD", "qty": "1", "price": "10"},
+            {"id": "fill-bot", "order_id": "bot", "symbol": "BTC/USD", "qty": "1", "price": "10"},
+            {"id": "fill-manual", "order_id": "manual-btc", "symbol": "BTCUSD", "qty": "1", "price": "10"},
+            {"id": "fill-aapl", "order_id": "aapl", "symbol": "AAPL", "qty": "1", "price": "10"},
+        ]
+        orders = [
+            {"id": "bot", "clientOrderId": "jsbotbtcbuy1"},
+            {"id": "manual-btc", "clientOrderId": "manual"},
+        ]
+        with patch("export_telemetry.paper_get", return_value=broker_page):
+            fills, complete = broker_fills({}, orders)
+        self.assertTrue(complete)
+        self.assertEqual({fill["id"] for fill in fills}, {"fill-bot", "fill-manual"})
+
+    def test_public_journal_keeps_only_lifecycle_for_bot_order_ids(self) -> None:
+        events = [
+            {"at": "1", "message": "SEND paper buy BTC/USD qty=1 id=jsbotbtcbuy1"},
+            {"at": "2", "message": "ACK id=jsbotbtcbuy1 status=accepted"},
+            {"at": "3", "message": "reconcile id=jsbotbtcbuy1 side=buy status=filled"},
+            {"at": "4", "message": "HOT_SAMPLE candidate=false policy=quote_cross_30s_v1"},
+            {"at": "5", "message": "SEND paper buy AAPL qty=1 id=manual-stock"},
+        ]
+        orders = [{"clientOrderId": "jsbotbtcbuy1"}]
+        self.assertEqual([row["at"] for row in public_journal(events, orders)],
+                         ["1", "2", "3"])
 
 
 if __name__ == "__main__":

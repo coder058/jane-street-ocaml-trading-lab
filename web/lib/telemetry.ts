@@ -5,22 +5,16 @@ export type PaperOrder = {
   clientOrderId: string;
   symbol: string;
   side: string;
-  type: string;
   status: string;
-  qty: string | null;
   filledQty: string;
-  filledAvgPrice: string | null;
   submittedAt: string | null;
-  filledAt: string | null;
 };
 
 export type PaperFill = {
   id: string;
   orderId: string;
-  clientOrderId: string;
   symbol: string;
   side: string;
-  type: string;
   qty: string;
   price: string;
   transactionTime: string | null;
@@ -32,32 +26,14 @@ export type PaperPosition = {
   side: string;
   avgEntryPrice: string;
   marketValue: string | null;
-  costBasis?: string | null;
   currentPrice?: string | null;
   unrealizedPl?: string | null;
-  unrealizedPlpc?: string | null;
   protected: boolean;
 };
 
 export type JournalEvent = {
   at: string;
   message: string;
-};
-
-export type MarketResearch = {
-  asOf: string;
-  orderAuthority: false;
-  winProbability: null;
-  symbols: {
-    symbol: string;
-    frames: Record<string, {
-      completeBars: number;
-      contiguousTailBars: number;
-      lastBarStart: string | null;
-      trend: string | null;
-      candleShapes: string[];
-    }>;
-  }[];
 };
 
 export type PaperTelemetry = {
@@ -86,8 +62,6 @@ export type PaperTelemetry = {
       trend: string | null;
     } | null;
   };
-  marketResearch?: MarketResearch | null;
-  account: { equity: string; cash: string; buyingPower: string };
   positions: PaperPosition[];
   orders: PaperOrder[];
   ordersComplete: boolean;
